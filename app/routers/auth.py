@@ -1,11 +1,17 @@
 from fastapi import APIRouter, Depends, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from typing import Optional
 from sqlalchemy.orm import Session
-from app.dependencies import get_db
-from app.schemas.auth import LoginRequest, RegisterRequest, Token, TokenRefresh, TokenResponse, LogoutResponse
+from app.dependencies import get_db, get_current_user
+from app.models.user import User
+from app.schemas.auth import LoginRequest, RegisterRequest, TokenRefresh
 from app.services.auth_service import AuthService
 from app.utils.response import success_response
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
+
+# Bearer scheme for logout endpoint
+bearer_scheme = HTTPBearer(auto_error=False)
 
 
 @router.post("/register", response_model=dict, status_code=status.HTTP_201_CREATED)
@@ -15,10 +21,9 @@ async def register(
 ):
     """
     Register a new user account
-    Returns user data without tokens
     """
     user = AuthService.register_user(db, user_data)
-    
+
     return success_response(
         data={
             "user": {
@@ -40,10 +45,10 @@ async def login(
     db: Session = Depends(get_db)
 ):
     """
-    Login user and get access token
+    Login user and get access + refresh tokens
     """
     user, access_token, refresh_token = AuthService.login_user(db, login_data)
-    
+
     return success_response(
         data={
             "user": {
@@ -67,10 +72,13 @@ async def refresh_token(
     db: Session = Depends(get_db)
 ):
     """
-    Refresh access token using refresh token
+    Refresh access token using refresh token.
+    Old refresh token is blacklisted after use (token rotation).
     """
-    access_token, refresh_token = AuthService.refresh_access_token(db, refresh_data.refresh_token)
-    
+    access_token, refresh_token = AuthService.refresh_access_token(
+        db, refresh_data.refresh_token
+    )
+
     return success_response(
         data={
             "access_token": access_token,
@@ -82,9 +90,29 @@ async def refresh_token(
 
 
 @router.post("/logout", response_model=dict)
-async def logout():
+async def logout(
+    refresh_data: Optional[TokenRefresh] = None,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """
-    Logout user (client should discard tokens)
+    Logout user. Blacklists access token and optionally refresh token.
+    Send refresh_token in body to invalidate it as well.
     """
-    result = AuthService.logout_user()
-    return success_response(data=result, message="Logout successful")
+    # Extract access token from Authorization header
+    access_token = credentials.credentials if credentials else None
+
+    # Extract refresh token from body if provided
+    refresh_token = refresh_data.refresh_token if refresh_data else None
+
+    result = AuthService.logout_user(
+        db=db,
+        access_token=access_token,
+        refresh_token=refresh_token
+    )
+
+    return success_response(
+        data=result,
+        message="Logout successful"
+    )

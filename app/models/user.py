@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime,timezone
 from sqlalchemy import Column, Integer, String, DateTime, Boolean, Enum
 from sqlalchemy.orm import relationship
 from app.core.database import Base
@@ -15,8 +15,8 @@ class User(Base):
     last_name = Column(String(50), nullable=False)
     role = Column(Enum(UserRole), default=UserRole.USER, nullable=False)
     is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime, default=datetime.now(timezone.utc), onupdate=datetime.now(timezone.utc), nullable=False)
     
     # Relationships
     bookings = relationship("Booking", back_populates="user", cascade="all, delete-orphan")

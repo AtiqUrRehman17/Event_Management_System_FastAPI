@@ -82,6 +82,16 @@ class InsufficientSeatsException(CustomHTTPException):
         )
 
 
+class InvalidStatusTransitionException(CustomHTTPException):
+    """Raised when an invalid event status transition is attempted"""
+    def __init__(self, from_status: str, to_status: str):
+        super().__init__(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot transition event status from '{from_status}' to '{to_status}'",
+            error_code="INVALID_STATUS_TRANSITION"
+        )
+
+
 # Booking Exceptions
 class BookingNotFoundException(CustomHTTPException):
     def __init__(self):

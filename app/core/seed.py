@@ -1,0 +1,51 @@
+from sqlalchemy.orm import Session
+from app.models.user import User
+from app.core.enums import UserRole
+from app.utils.auth_utils import hash_password
+from app.core.config import settings
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+def seed_admin(db: Session) -> None:
+    """
+    Create default admin user if no admin exists.
+    Runs on every server startup.
+    Credentials are read from .env file.
+    """
+    try:
+        # Check if admin already exists
+        existing_admin = db.query(User).filter(
+            User.role == UserRole.ADMIN
+        ).first()
+
+        if existing_admin:
+            logger.info(
+                f"Admin already exists: {existing_admin.email} "
+                f"- Skipping seed"
+            )
+            return
+
+        # Create default admin from env settings
+        admin = User(
+            email=settings.ADMIN_EMAIL,
+            password_hash=hash_password(settings.ADMIN_PASSWORD),
+            first_name=settings.ADMIN_FIRST_NAME,
+            last_name=settings.ADMIN_LAST_NAME,
+            role=UserRole.ADMIN,
+            is_active=True
+        )
+
+        db.add(admin)
+        db.commit()
+        db.refresh(admin)
+
+        logger.info(
+            f"Default admin created successfully: {admin.email}"
+        )
+
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Failed to seed admin user: {str(e)}")
+        raise

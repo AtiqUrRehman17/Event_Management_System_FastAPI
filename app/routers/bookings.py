@@ -7,7 +7,7 @@ from app.schemas.booking import BookingCreate
 from app.services.booking_service import BookingService
 from app.services.event_service import EventService
 from app.utils.response import success_response, paginated_response
-from app.core.enums import BookingStatus, EventStatus
+from app.core.enums import BookingStatus, UserRole
 
 router = APIRouter(prefix="/bookings", tags=["Bookings"])
 
@@ -22,10 +22,8 @@ async def create_booking(
     Book an event for current user
     """
     booking = BookingService.create_booking(db, current_user.id, booking_data)
-    
-    # Get event details
     event = EventService.get_event_by_id(db, booking.event_id)
-    
+
     return success_response(
         data={
             "id": booking.id,
@@ -45,6 +43,24 @@ async def create_booking(
     )
 
 
+@router.get("/me/summary", response_model=dict)
+async def get_my_booking_summary(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Get summary of current user's bookings.
+    Uses DB aggregation - no large memory loads.
+    Must be declared BEFORE /me to avoid route conflicts.
+    """
+    summary = BookingService.get_user_booking_summary(db, current_user.id)
+
+    return success_response(
+        data=summary,
+        message="Booking summary retrieved successfully"
+    )
+
+
 @router.get("/me", response_model=dict)
 async def get_my_bookings(
     page: int = Query(1, ge=1),
@@ -54,12 +70,13 @@ async def get_my_bookings(
     current_user: User = Depends(get_current_user)
 ):
     """
-    Get current user's bookings
+    Get current user's bookings.
+    total_spent always reflects ALL active bookings regardless of filter.
     """
     bookings, total, total_spent = BookingService.get_user_bookings(
         db, current_user.id, page, limit, status
     )
-    
+
     booking_data = []
     for booking in bookings:
         event = EventService.get_event_by_id(db, booking.event_id)
@@ -77,14 +94,24 @@ async def get_my_bookings(
             "created_at": booking.created_at,
             "updated_at": booking.updated_at
         })
-    
-    return paginated_response(
+
+    # Build paginated response then add total_spent cleanly
+    response = paginated_response(
         items=booking_data,
         total=total,
         page=page,
         limit=limit,
         message="Bookings retrieved successfully"
-    ) | {"total_spent": total_spent}
+    )
+
+    # Add total_spent into the response body directly
+    response_data = response.body
+    import json
+    body = json.loads(response_data)
+    body["total_spent"] = total_spent
+
+    from fastapi.responses import JSONResponse
+    return JSONResponse(content=body, status_code=response.status_code)
 
 
 @router.get("/", response_model=dict)
@@ -99,7 +126,7 @@ async def get_all_bookings(
     Get all bookings (Admin only)
     """
     bookings, total = BookingService.get_all_bookings(db, page, limit, status)
-    
+
     booking_data = []
     for booking in bookings:
         event = EventService.get_event_by_id(db, booking.event_id)
@@ -117,7 +144,7 @@ async def get_all_bookings(
             "created_at": booking.created_at,
             "updated_at": booking.updated_at
         })
-    
+
     return paginated_response(
         items=booking_data,
         total=total,
@@ -134,21 +161,22 @@ async def get_event_bookings(
     current_user: User = Depends(get_current_admin)
 ):
     """
-    Get all bookings for a specific event (Admin only)
+    Get all active bookings for a specific event (Admin only)
     """
     bookings = BookingService.get_event_bookings(db, event_id)
     event = EventService.get_event_by_id(db, event_id)
-    
-    booking_data = []
-    for booking in bookings:
-        booking_data.append({
+
+    booking_data = [
+        {
             "id": booking.id,
             "user_id": booking.user_id,
             "number_of_seats": booking.number_of_seats,
             "total_price": booking.total_price,
             "booking_date": booking.booking_date
-        })
-    
+        }
+        for booking in bookings
+    ]
+
     return success_response(
         data={
             "event_id": event_id,
@@ -168,13 +196,15 @@ async def cancel_booking(
     current_user: User = Depends(get_current_user)
 ):
     """
-    Cancel a booking (User can cancel own, Admin can cancel any)
+    Cancel a booking.
+    Users can cancel their own bookings.
+    Admins can cancel any booking.
     """
-    is_admin = current_user.role == "admin"
+    # ✅ Fix: Use enum comparison instead of string comparison
+    is_admin = current_user.role == UserRole.ADMIN
     booking = BookingService.cancel_booking(db, booking_id, current_user.id, is_admin)
-    
     event = EventService.get_event_by_id(db, booking.event_id)
-    
+
     return success_response(
         data={
             "id": booking.id,
@@ -182,36 +212,7 @@ async def cancel_booking(
             "event_title": event.title,
             "number_of_seats": booking.number_of_seats,
             "status": booking.status,
-            "cancelled_at": booking.cancelled_at,
-            "message": "Booking cancelled successfully"
+            "cancelled_at": booking.cancelled_at
         },
         message="Booking cancelled successfully"
-    )
-
-
-@router.get("/me/summary", response_model=dict)
-async def get_my_booking_summary(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """
-    Get summary of current user's bookings
-    """
-    active_bookings, active_total, active_spent = BookingService.get_user_bookings(
-        db, current_user.id, 1, 1000, BookingStatus.ACTIVE
-    )
-    
-    cancelled_bookings, cancelled_total, cancelled_spent = BookingService.get_user_bookings(
-        db, current_user.id, 1, 1000, BookingStatus.CANCELLED
-    )
-    
-    return success_response(
-        data={
-            "total_active_bookings": active_total,
-            "total_cancelled_bookings": cancelled_total,
-            "total_spent": active_spent,
-            "active_bookings_count": len(active_bookings),
-            "cancelled_bookings_count": len(cancelled_bookings)
-        },
-        message="Booking summary retrieved successfully"
     )

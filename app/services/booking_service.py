@@ -1,9 +1,9 @@
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from typing import List, Tuple, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from app.models.booking import Booking
 from app.models.event import Event
-from app.models.user import User
 from app.schemas.booking import BookingCreate
 from app.core.exceptions import (
     EventNotFoundException,
@@ -14,32 +14,42 @@ from app.core.exceptions import (
     BookingAlreadyCancelledException
 )
 from app.core.enums import EventStatus, BookingStatus
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class BookingService:
-    
+
     @staticmethod
-    def create_booking(db: Session, user_id: int, booking_data: BookingCreate) -> Booking:
+    def create_booking(
+        db: Session,
+        user_id: int,
+        booking_data: BookingCreate
+    ) -> Booking:
         """Create a new booking"""
         # Get event
         event = db.query(Event).filter(Event.id == booking_data.event_id).first()
         if not event:
             raise EventNotFoundException()
-        
-        # Check if event is available for booking
+
+        # Check event is upcoming
         if event.status != EventStatus.UPCOMING:
-            raise EventNotAvailableException("Cannot book this event as it is not upcoming")
-        
-        if event.event_date < datetime.utcnow():
+            raise EventNotAvailableException(
+                "Cannot book this event as it is not upcoming"
+            )
+
+        # Check event date not in past
+        if event.event_date < datetime.now(timezone.utc):
             raise EventNotAvailableException("Cannot book past events")
-        
+
         # Check seat availability
         if event.available_seats < booking_data.number_of_seats:
             raise InsufficientSeatsException(event.available_seats)
-        
+
         # Calculate total price
         total_price = event.price * booking_data.number_of_seats
-        
+
         # Create booking
         booking = Booking(
             user_id=user_id,
@@ -48,16 +58,16 @@ class BookingService:
             total_price=total_price,
             status=BookingStatus.ACTIVE
         )
-        
-        # Update available seats
+
+        # Decrement available seats atomically
         event.available_seats -= booking_data.number_of_seats
-        
+
         db.add(booking)
         db.commit()
         db.refresh(booking)
-        
+
         return booking
-    
+
     @staticmethod
     def get_booking_by_id(db: Session, booking_id: int) -> Booking:
         """Get booking by ID"""
@@ -65,7 +75,7 @@ class BookingService:
         if not booking:
             raise BookingNotFoundException()
         return booking
-    
+
     @staticmethod
     def get_user_bookings(
         db: Session,
@@ -74,22 +84,40 @@ class BookingService:
         limit: int = 10,
         status: Optional[BookingStatus] = None
     ) -> Tuple[List[Booking], int, float]:
-        """Get all bookings for a specific user"""
-        query = db.query(Booking).filter(Booking.user_id == user_id)
-        
+        """
+        Get all bookings for a specific user.
+        total_spent is ALWAYS calculated from ACTIVE bookings only,
+        regardless of the status filter applied.
+        """
+        # Base query for this user
+        base_query = db.query(Booking).filter(Booking.user_id == user_id)
+
+        # ✅ Fix: Calculate total_spent from ALL active bookings
+        # This is independent of the status filter
+        total_spent_result = db.query(
+            func.coalesce(func.sum(Booking.total_price), 0)
+        ).filter(
+            Booking.user_id == user_id,
+            Booking.status == BookingStatus.ACTIVE
+        ).scalar()
+
+        total_spent = float(total_spent_result)
+
+        # Apply status filter for listing
         if status:
-            query = query.filter(Booking.status == status)
-        
-        # Get total count and total spent
-        total = query.count()
-        total_spent = sum([b.total_price for b in query.all() if b.status == BookingStatus.ACTIVE])
-        
+            base_query = base_query.filter(Booking.status == status)
+
+        # Get total count for pagination
+        total = base_query.count()
+
         # Apply pagination
         offset = (page - 1) * limit
-        bookings = query.order_by(Booking.created_at.desc()).offset(offset).limit(limit).all()
-        
+        bookings = base_query.order_by(
+            Booking.created_at.desc()
+        ).offset(offset).limit(limit).all()
+
         return bookings, total, total_spent
-    
+
     @staticmethod
     def get_all_bookings(
         db: Session,
@@ -99,50 +127,86 @@ class BookingService:
     ) -> Tuple[List[Booking], int]:
         """Get all bookings (Admin only)"""
         query = db.query(Booking)
-        
+
         if status:
             query = query.filter(Booking.status == status)
-        
+
         total = query.count()
         offset = (page - 1) * limit
-        bookings = query.order_by(Booking.created_at.desc()).offset(offset).limit(limit).all()
-        
+        bookings = query.order_by(
+            Booking.created_at.desc()
+        ).offset(offset).limit(limit).all()
+
         return bookings, total
-    
+
     @staticmethod
-    def cancel_booking(db: Session, booking_id: int, user_id: int, is_admin: bool = False) -> Booking:
+    def cancel_booking(
+        db: Session,
+        booking_id: int,
+        user_id: int,
+        is_admin: bool = False
+    ) -> Booking:
         """Cancel a booking"""
         booking = BookingService.get_booking_by_id(db, booking_id)
-        
-        # Check if booking belongs to user (unless admin)
+
+        # Check ownership unless admin
         if not is_admin and booking.user_id != user_id:
             raise BookingNotOwnedException()
-        
+
         # Check if already cancelled
         if booking.status == BookingStatus.CANCELLED:
             raise BookingAlreadyCancelledException()
-        
-        # Check if event is still upcoming
+
+        # Check event is still upcoming
         event = booking.event
         if event.status != EventStatus.UPCOMING:
-            raise EventNotAvailableException("Cannot cancel booking for completed or cancelled events")
-        
+            raise EventNotAvailableException(
+                "Cannot cancel booking for completed or cancelled events"
+            )
+
         # Update booking status
         booking.status = BookingStatus.CANCELLED
-        booking.cancelled_at = datetime.utcnow()
-        
-        # Return seats to event
+        booking.cancelled_at = datetime.now(timezone.utc)
+
+        # Return seats back to event
         event.available_seats += booking.number_of_seats
-        
+
         db.commit()
         db.refresh(booking)
-        
+
         return booking
-    
+
     @staticmethod
     def get_event_bookings(db: Session, event_id: int) -> List[Booking]:
-        """Get all bookings for a specific event (Admin only)"""
+        """Get all ACTIVE bookings for a specific event (Admin only)"""
         return db.query(Booking).filter(
             Booking.event_id == event_id,
             Booking.status == BookingStatus.ACTIVE
         ).all()
+
+    @staticmethod
+    def get_user_booking_summary(db: Session, user_id: int) -> dict:
+        """
+        Get booking summary for a user using DB aggregation.
+        Much more efficient than loading all records into memory.
+        """
+        # Active bookings count and total spent
+        active_result = db.query(
+            func.count(Booking.id).label("count"),
+            func.coalesce(func.sum(Booking.total_price), 0).label("total_spent")
+        ).filter(
+            Booking.user_id == user_id,
+            Booking.status == BookingStatus.ACTIVE
+        ).first()
+
+        # Cancelled bookings count
+        cancelled_count = db.query(func.count(Booking.id)).filter(
+            Booking.user_id == user_id,
+            Booking.status == BookingStatus.CANCELLED
+        ).scalar()
+
+        return {
+            "total_active_bookings": active_result.count if active_result else 0,
+            "total_cancelled_bookings": cancelled_count or 0,
+            "total_spent": float(active_result.total_spent) if active_result else 0.0
+        }
