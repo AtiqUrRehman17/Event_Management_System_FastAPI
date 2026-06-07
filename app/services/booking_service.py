@@ -19,6 +19,18 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def make_aware(dt: datetime) -> datetime:
+    """
+    Convert naive datetime to UTC aware datetime.
+    If already aware, return as-is.
+    """
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
 class BookingService:
 
     @staticmethod
@@ -39,8 +51,9 @@ class BookingService:
                 "Cannot book this event as it is not upcoming"
             )
 
-        # Check event date not in past
-        if event.event_date < datetime.now(timezone.utc):
+        # Check event date not in past (handle naive vs aware datetime)
+        event_date = make_aware(event.event_date)
+        if event_date < datetime.now(timezone.utc):
             raise EventNotAvailableException("Cannot book past events")
 
         # Check seat availability
@@ -59,7 +72,7 @@ class BookingService:
             status=BookingStatus.ACTIVE
         )
 
-        # Decrement available seats atomically
+        # Decrement available seats
         event.available_seats -= booking_data.number_of_seats
 
         db.add(booking)
@@ -86,14 +99,11 @@ class BookingService:
     ) -> Tuple[List[Booking], int, float]:
         """
         Get all bookings for a specific user.
-        total_spent is ALWAYS calculated from ACTIVE bookings only,
-        regardless of the status filter applied.
+        total_spent is ALWAYS calculated from ACTIVE bookings only.
         """
-        # Base query for this user
         base_query = db.query(Booking).filter(Booking.user_id == user_id)
 
-        # ✅ Fix: Calculate total_spent from ALL active bookings
-        # This is independent of the status filter
+        # Calculate total_spent from ALL active bookings
         total_spent_result = db.query(
             func.coalesce(func.sum(Booking.total_price), 0)
         ).filter(
@@ -107,10 +117,8 @@ class BookingService:
         if status:
             base_query = base_query.filter(Booking.status == status)
 
-        # Get total count for pagination
         total = base_query.count()
 
-        # Apply pagination
         offset = (page - 1) * limit
         bookings = base_query.order_by(
             Booking.created_at.desc()
@@ -187,10 +195,8 @@ class BookingService:
     @staticmethod
     def get_user_booking_summary(db: Session, user_id: int) -> dict:
         """
-        Get booking summary for a user using DB aggregation.
-        Much more efficient than loading all records into memory.
+        Get booking summary using DB aggregation.
         """
-        # Active bookings count and total spent
         active_result = db.query(
             func.count(Booking.id).label("count"),
             func.coalesce(func.sum(Booking.total_price), 0).label("total_spent")
@@ -199,7 +205,6 @@ class BookingService:
             Booking.status == BookingStatus.ACTIVE
         ).first()
 
-        # Cancelled bookings count
         cancelled_count = db.query(func.count(Booking.id)).filter(
             Booking.user_id == user_id,
             Booking.status == BookingStatus.CANCELLED

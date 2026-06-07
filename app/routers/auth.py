@@ -10,7 +10,6 @@ from app.utils.response import success_response
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
-# Bearer scheme for logout endpoint
 bearer_scheme = HTTPBearer(auto_error=False)
 
 
@@ -19,15 +18,14 @@ async def register(
     user_data: RegisterRequest,
     db: Session = Depends(get_db)
 ):
-    """
-    Register a new user account
-    """
+    """Register a new user account"""
     user = AuthService.register_user(db, user_data)
 
     return success_response(
         data={
             "user": {
                 "id": user.id,
+                "username": user.username,
                 "email": user.email,
                 "first_name": user.first_name,
                 "last_name": user.last_name,
@@ -44,15 +42,14 @@ async def login(
     login_data: LoginRequest,
     db: Session = Depends(get_db)
 ):
-    """
-    Login user and get access + refresh tokens
-    """
+    """Login using username and password"""
     user, access_token, refresh_token = AuthService.login_user(db, login_data)
 
     return success_response(
         data={
             "user": {
                 "id": user.id,
+                "username": user.username,
                 "email": user.email,
                 "first_name": user.first_name,
                 "last_name": user.last_name,
@@ -71,10 +68,7 @@ async def refresh_token(
     refresh_data: TokenRefresh,
     db: Session = Depends(get_db)
 ):
-    """
-    Refresh access token using refresh token.
-    Old refresh token is blacklisted after use (token rotation).
-    """
+    """Refresh access token"""
     access_token, refresh_token = AuthService.refresh_access_token(
         db, refresh_data.refresh_token
     )
@@ -96,14 +90,8 @@ async def logout(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """
-    Logout user. Blacklists access token and optionally refresh token.
-    Send refresh_token in body to invalidate it as well.
-    """
-    # Extract access token from Authorization header
+    """Logout and blacklist tokens"""
     access_token = credentials.credentials if credentials else None
-
-    # Extract refresh token from body if provided
     refresh_token = refresh_data.refresh_token if refresh_data else None
 
     result = AuthService.logout_user(
@@ -112,7 +100,4 @@ async def logout(
         refresh_token=refresh_token
     )
 
-    return success_response(
-        data=result,
-        message="Logout successful"
-    )
+    return success_response(data=result, message="Logout successful")

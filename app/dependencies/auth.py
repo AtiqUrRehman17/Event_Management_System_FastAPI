@@ -22,7 +22,6 @@ oauth2_scheme = HTTPBearer(
     description="Enter your JWT token"
 )
 
-# Optional endpoints - auto_error=False → allows no token
 oauth2_scheme_optional = HTTPBearer(
     auto_error=False,
     scheme_name="BearerAuth",
@@ -39,7 +38,6 @@ async def get_current_user(
     REQUIRED authentication - will reject if no token provided.
     Also checks if token has been blacklisted (logged out).
     """
-    # credentials is guaranteed to exist because auto_error=True
     token = credentials.credentials
 
     # Check if token is blacklisted (user logged out)

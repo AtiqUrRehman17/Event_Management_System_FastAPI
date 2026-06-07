@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     PORT: int = 8000
 
     # Default Admin Credentials
+    ADMIN_USERNAME: str = "admin"
     ADMIN_EMAIL: str = "admin@example.com"
     ADMIN_PASSWORD: str = "Admin@1234"
     ADMIN_FIRST_NAME: str = "Super"

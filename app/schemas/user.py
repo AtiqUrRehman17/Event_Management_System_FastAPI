@@ -5,6 +5,7 @@ from app.core.enums import UserRole
 
 
 class UserBase(BaseModel):
+    username: str = Field(..., min_length=3, max_length=50)
     email: EmailStr
     first_name: str = Field(..., min_length=2, max_length=50)
     last_name: str = Field(..., min_length=2, max_length=50)
@@ -15,6 +16,7 @@ class UserCreate(UserBase):
 
 
 class UserUpdate(BaseModel):
+    username: Optional[str] = Field(None, min_length=3, max_length=50)
     first_name: Optional[str] = Field(None, min_length=2, max_length=50)
     last_name: Optional[str] = Field(None, min_length=2, max_length=50)
     email: Optional[EmailStr] = None
@@ -28,6 +30,7 @@ class UserProfileUpdate(BaseModel):
 
 class UserResponse(BaseModel):
     id: int
+    username: str
     email: EmailStr
     first_name: str
     last_name: str
@@ -36,7 +39,7 @@ class UserResponse(BaseModel):
     is_active: bool
     created_at: datetime
     updated_at: datetime
-    
+
     class Config:
         from_attributes = True
 

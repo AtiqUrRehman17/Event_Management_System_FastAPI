@@ -15,19 +15,29 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def make_aware(dt: datetime) -> datetime:
+    """
+    Convert naive datetime to UTC aware datetime.
+    If already aware, return as-is.
+    """
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
 class EventService:
 
-    # Valid status transitions map
-    # Key = current status, Value = list of allowed next statuses
     VALID_STATUS_TRANSITIONS = {
         EventStatus.UPCOMING: [
-            EventStatus.CANCELLED,   # Admin cancels upcoming event
-            EventStatus.COMPLETED    # Only if event date has passed
+            EventStatus.CANCELLED,
+            EventStatus.COMPLETED
         ],
         EventStatus.COMPLETED: [
-            EventStatus.CANCELLED    # Admin can cancel a completed event
+            EventStatus.CANCELLED
         ],
-        EventStatus.CANCELLED: []    # Cannot transition out of cancelled
+        EventStatus.CANCELLED: []
     }
 
     @staticmethod
@@ -36,11 +46,7 @@ class EventService:
         new_status: EventStatus,
         event_date: datetime
     ) -> None:
-        """
-        Validate if a status transition is allowed.
-        Raises InvalidStatusTransitionException if not allowed.
-        """
-        # No change → nothing to validate
+        """Validate if a status transition is allowed."""
         if current_status == new_status:
             return
 
@@ -52,15 +58,13 @@ class EventService:
                 to_status=new_status.value
             )
 
-        # Extra check: UPCOMING → COMPLETED only allowed if event date has passed
+        # UPCOMING → COMPLETED only if event date has passed
         if (
             current_status == EventStatus.UPCOMING
             and new_status == EventStatus.COMPLETED
         ):
             now = datetime.now(timezone.utc)
-            # Make event_date timezone aware for comparison
-            event_date_aware = event_date.replace(tzinfo=timezone.utc) \
-                if event_date.tzinfo is None else event_date
+            event_date_aware = make_aware(event_date)
 
             if event_date_aware > now:
                 raise InvalidStatusTransitionException(
@@ -156,7 +160,7 @@ class EventService:
         """Update event with status transition validation"""
         event = EventService.get_event_by_id(db, event_id)
 
-        # Validate status transition FIRST before any other updates
+        # Validate status transition FIRST
         if event_data.status is not None:
             EventService._validate_status_transition(
                 current_status=event.status,
@@ -164,25 +168,22 @@ class EventService:
                 event_date=event.event_date
             )
 
-        # Update title
         if event_data.title is not None:
             event.title = event_data.title
 
-        # Update description
         if event_data.description is not None:
             event.description = event_data.description
 
-        # Update location
         if event_data.location is not None:
             event.location = event_data.location
 
-        # Update event date
+        # Fix: Use make_aware for date comparison
         if event_data.event_date is not None:
-            if event_data.event_date < datetime.now(timezone.utc):
+            new_date = make_aware(event_data.event_date)
+            if new_date < datetime.now(timezone.utc):
                 raise EventNotAvailableException("Event date cannot be in the past")
             event.event_date = event_data.event_date
 
-        # Update total seats with protection
         if event_data.total_seats is not None:
             booked_seats = event.total_seats - event.available_seats
             new_available = event_data.total_seats - booked_seats
@@ -195,7 +196,6 @@ class EventService:
             event.total_seats = event_data.total_seats
             event.available_seats = new_available
 
-        # Update available seats manually
         if event_data.available_seats is not None:
             if event_data.available_seats > event.total_seats:
                 raise EventNotAvailableException(
@@ -203,24 +203,19 @@ class EventService:
                 )
             event.available_seats = event_data.available_seats
 
-        # Update price
         if event_data.price is not None:
             event.price = event_data.price
 
-        # Apply validated status
         if event_data.status is not None:
             event.status = event_data.status
 
-        # Update category
         if event_data.category_id is not None:
             event.category_id = event_data.category_id
 
-        # Update image
         if event_data.image_url is not None:
             event.image_url = event_data.image_url
 
         event.updated_at = datetime.now(timezone.utc)
-        # DO NOT overwrite created_by
 
         db.commit()
         db.refresh(event)
@@ -237,25 +232,27 @@ class EventService:
     @staticmethod
     def update_event_status(db: Session) -> int:
         """
-        Auto-update event statuses based on current date/time.
-        Marks all UPCOMING events whose date has passed as COMPLETED.
-        Returns count of updated events.
+        Auto-update event statuses.
+        Marks UPCOMING events with past dates as COMPLETED.
+        Handles both naive and aware datetimes from DB.
         """
         now = datetime.now(timezone.utc)
 
         try:
-            updated = db.query(Event).filter(
-                Event.event_date < now,
+            # Get all upcoming events
+            upcoming_events = db.query(Event).filter(
                 Event.status == EventStatus.UPCOMING
             ).all()
 
-            count = len(updated)
-
-            if count > 0:
-                for event in updated:
+            count = 0
+            for event in upcoming_events:
+                event_date = make_aware(event.event_date)
+                if event_date < now:
                     event.status = EventStatus.COMPLETED
                     event.updated_at = now
+                    count += 1
 
+            if count > 0:
                 db.commit()
                 logger.info(f"Auto-status update: {count} event(s) marked as COMPLETED")
 

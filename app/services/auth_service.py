@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 from typing import Tuple, Optional
 from app.models.user import User
 from app.models.token_blacklist import TokenBlacklist
@@ -9,6 +9,7 @@ from app.core import Security, settings
 from app.core.exceptions import (
     InvalidCredentialsException,
     EmailAlreadyExistsException,
+    UsernameAlreadyExistsException,
     InvalidTokenException
 )
 from app.core.enums import UserRole
@@ -21,17 +22,24 @@ class AuthService:
 
     @staticmethod
     def register_user(db: Session, user_data: RegisterRequest) -> User:
-        """
-        Register a new user - returns only user, no tokens
-        """
-        # Check if user already exists
-        existing_user = db.query(User).filter(User.email == user_data.email).first()
-        if existing_user:
+        """Register a new user with unique username and email"""
+        # Check if username already taken
+        existing_username = db.query(User).filter(
+            User.username == user_data.username.lower()
+        ).first()
+        if existing_username:
+            raise UsernameAlreadyExistsException()
+
+        # Check if email already taken
+        existing_email = db.query(User).filter(
+            User.email == user_data.email
+        ).first()
+        if existing_email:
             raise EmailAlreadyExistsException()
 
-        # Create new user
         hashed_password = hash_password(user_data.password)
         new_user = User(
+            username=user_data.username.lower(),
             email=user_data.email,
             password_hash=hashed_password,
             first_name=user_data.first_name,
@@ -49,23 +57,21 @@ class AuthService:
     @staticmethod
     def login_user(db: Session, login_data: LoginRequest) -> Tuple[User, str, str]:
         """
-        Authenticate user and return tokens
-        Returns: (user, access_token, refresh_token)
+        Authenticate user using username and password.
         """
-        # Find user by email
-        user = db.query(User).filter(User.email == login_data.email).first()
+        # Find user by username
+        user = db.query(User).filter(
+            User.username == login_data.username.lower()
+        ).first()
         if not user:
             raise InvalidCredentialsException()
 
-        # Verify password
         if not verify_password(login_data.password, user.password_hash):
             raise InvalidCredentialsException()
 
-        # Check if user is active
         if not user.is_active:
             raise InvalidCredentialsException()
 
-        # Generate tokens
         access_token = Security.create_access_token(data={"sub": str(user.id)})
         refresh_token = Security.create_refresh_token(data={"sub": str(user.id)})
 
@@ -73,34 +79,26 @@ class AuthService:
 
     @staticmethod
     def refresh_access_token(db: Session, refresh_token: str) -> Tuple[str, str]:
-        """
-        Generate new access token using refresh token
-        Returns: (new_access_token, new_refresh_token)
-        """
-        # Check if refresh token is blacklisted
+        """Generate new tokens using refresh token"""
         if AuthService.is_token_blacklisted(db, refresh_token):
             raise InvalidTokenException()
 
-        # Verify refresh token
         payload = Security.verify_token(refresh_token, token_type="refresh")
         user_id = payload.get("sub")
 
         if not user_id:
             raise InvalidCredentialsException()
 
-        # Check if user exists and is active
         user = db.query(User).filter(User.id == int(user_id)).first()
         if not user or not user.is_active:
             raise InvalidCredentialsException()
 
-        # Blacklist old refresh token so it cannot be reused
         AuthService._blacklist_token(
             db=db,
             token=refresh_token,
             expires_at=datetime.fromtimestamp(payload["exp"], tz=timezone.utc)
         )
 
-        # Generate new tokens
         new_access_token = Security.create_access_token(data={"sub": str(user.id)})
         new_refresh_token = Security.create_refresh_token(data={"sub": str(user.id)})
 
@@ -108,33 +106,27 @@ class AuthService:
 
     @staticmethod
     def logout_user(db: Session, access_token: str, refresh_token: Optional[str] = None) -> dict:
-        """
-        Logout user by blacklisting both access and refresh tokens
-        """
-        # Blacklist access token
+        """Logout user by blacklisting tokens"""
         try:
             payload = Security.verify_token(access_token, token_type="access")
             expires_at = datetime.fromtimestamp(payload["exp"], tz=timezone.utc)
             AuthService._blacklist_token(db, access_token, expires_at)
         except Exception as e:
-            logger.warning(f"Could not blacklist access token during logout: {str(e)}")
+            logger.warning(f"Could not blacklist access token: {str(e)}")
 
-        # Blacklist refresh token if provided
         if refresh_token:
             try:
                 payload = Security.verify_token(refresh_token, token_type="refresh")
                 expires_at = datetime.fromtimestamp(payload["exp"], tz=timezone.utc)
                 AuthService._blacklist_token(db, refresh_token, expires_at)
             except Exception as e:
-                logger.warning(f"Could not blacklist refresh token during logout: {str(e)}")
+                logger.warning(f"Could not blacklist refresh token: {str(e)}")
 
         return {"message": "Successfully logged out"}
 
     @staticmethod
     def is_token_blacklisted(db: Session, token: str) -> bool:
-        """
-        Check if a token is in the blacklist
-        """
+        """Check if token is blacklisted"""
         blacklisted = db.query(TokenBlacklist).filter(
             TokenBlacklist.token == token
         ).first()
@@ -142,10 +134,7 @@ class AuthService:
 
     @staticmethod
     def _blacklist_token(db: Session, token: str, expires_at: datetime) -> None:
-        """
-        Add a token to the blacklist
-        """
-        # Check if already blacklisted to avoid duplicate entry
+        """Add token to blacklist"""
         existing = db.query(TokenBlacklist).filter(
             TokenBlacklist.token == token
         ).first()
@@ -160,10 +149,7 @@ class AuthService:
 
     @staticmethod
     def cleanup_expired_tokens(db: Session) -> int:
-        """
-        Remove expired tokens from blacklist to keep table clean.
-        Called by scheduler.
-        """
+        """Remove expired tokens from blacklist"""
         now = datetime.now(timezone.utc)
         try:
             expired = db.query(TokenBlacklist).filter(

@@ -15,12 +15,11 @@ router = APIRouter(prefix="/users", tags=["Users"])
 async def get_current_user_profile(
     current_user: User = Depends(get_current_user)
 ):
-    """
-    Get current user's profile
-    """
+    """Get current user's profile"""
     return success_response(
         data={
             "id": current_user.id,
+            "username": current_user.username,
             "email": current_user.email,
             "first_name": current_user.first_name,
             "last_name": current_user.last_name,
@@ -40,14 +39,13 @@ async def update_current_user_profile(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """
-    Update current user's profile
-    """
+    """Update current user's profile"""
     updated_user = UserService.update_user_profile(db, current_user.id, profile_data)
-    
+
     return success_response(
         data={
             "id": updated_user.id,
+            "username": updated_user.username,
             "email": updated_user.email,
             "first_name": updated_user.first_name,
             "last_name": updated_user.last_name,
@@ -69,14 +67,13 @@ async def get_all_users(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin)
 ):
-    """
-    Get all users with pagination (Admin only)
-    """
+    """Get all users with pagination (Admin only)"""
     users, total = UserService.get_all_users(db, page, limit, role, search)
-    
+
     user_responses = [
         {
             "id": user.id,
+            "username": user.username,
             "email": user.email,
             "first_name": user.first_name,
             "last_name": user.last_name,
@@ -88,7 +85,7 @@ async def get_all_users(
         }
         for user in users
     ]
-    
+
     return paginated_response(
         items=user_responses,
         total=total,
@@ -104,14 +101,13 @@ async def get_user_by_id(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin)
 ):
-    """
-    Get user by ID (Admin only)
-    """
+    """Get user by ID (Admin only)"""
     user = UserService.get_user_by_id(db, user_id)
-    
+
     return success_response(
         data={
             "id": user.id,
+            "username": user.username,
             "email": user.email,
             "first_name": user.first_name,
             "last_name": user.last_name,
@@ -131,14 +127,13 @@ async def deactivate_user(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin)
 ):
-    """
-    Deactivate a user account (Admin only)
-    """
+    """Deactivate a user account (Admin only)"""
     user = UserService.deactivate_user(db, user_id)
-    
+
     return success_response(
         data={
             "id": user.id,
+            "username": user.username,
             "email": user.email,
             "is_active": user.is_active
         },
@@ -152,14 +147,13 @@ async def activate_user(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin)
 ):
-    """
-    Activate a user account (Admin only)
-    """
+    """Activate a user account (Admin only)"""
     user = UserService.activate_user(db, user_id)
-    
+
     return success_response(
         data={
             "id": user.id,
+            "username": user.username,
             "email": user.email,
             "is_active": user.is_active
         },

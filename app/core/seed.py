@@ -9,26 +9,21 @@ logger = logging.getLogger(__name__)
 
 
 def seed_admin(db: Session) -> None:
-    """
-    Create default admin user if no admin exists.
-    Runs on every server startup.
-    Credentials are read from .env file.
-    """
+    """Create default admin user if no admin exists."""
     try:
-        # Check if admin already exists
         existing_admin = db.query(User).filter(
             User.role == UserRole.ADMIN
         ).first()
 
         if existing_admin:
             logger.info(
-                f"Admin already exists: {existing_admin.email} "
+                f"Admin already exists: {existing_admin.username} "
                 f"- Skipping seed"
             )
             return
 
-        # Create default admin from env settings
         admin = User(
+            username=settings.ADMIN_USERNAME,
             email=settings.ADMIN_EMAIL,
             password_hash=hash_password(settings.ADMIN_PASSWORD),
             first_name=settings.ADMIN_FIRST_NAME,
@@ -42,7 +37,7 @@ def seed_admin(db: Session) -> None:
         db.refresh(admin)
 
         logger.info(
-            f"Default admin created successfully: {admin.email}"
+            f"Default admin created successfully - username: {admin.username}"
         )
 
     except Exception as e:

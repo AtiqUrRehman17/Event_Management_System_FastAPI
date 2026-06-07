@@ -6,7 +6,6 @@ from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 import jwt
 from jwt.exceptions import PyJWTError
 import logging
-from typing import Union
 
 from app.core.exceptions import (
     CustomHTTPException,
@@ -15,6 +14,7 @@ from app.core.exceptions import (
     InvalidTokenException,
     UserNotFoundException,
     EmailAlreadyExistsException,
+    UsernameAlreadyExistsException,
     EventNotFoundException,
     EventNotAvailableException,
     InsufficientSeatsException,
@@ -24,7 +24,7 @@ from app.core.exceptions import (
     CategoryNotFoundException,
     CategoryAlreadyExistsException,
     PermissionDeniedException,
-    InvalidStatusTransitionException,  # new
+    InvalidStatusTransitionException,
 )
 from app.utils.response import error_response
 
@@ -32,9 +32,7 @@ logger = logging.getLogger(__name__)
 
 
 def register_error_handlers(app: FastAPI):
-    """
-    Register all error handlers for the FastAPI application
-    """
+    """Register all error handlers"""
 
     @app.exception_handler(CustomHTTPException)
     async def custom_http_exception_handler(request: Request, exc: CustomHTTPException):
@@ -127,7 +125,7 @@ def register_error_handlers(app: FastAPI):
 
     @app.exception_handler(InvalidCredentialsException)
     async def invalid_credentials_handler(request: Request, exc: InvalidCredentialsException):
-        logger.warning(f"Invalid credentials attempt - Path: {request.url.path}")
+        logger.warning(f"Invalid credentials - Path: {request.url.path}")
         return error_response(
             message=exc.detail,
             status_code=exc.status_code,
@@ -145,7 +143,7 @@ def register_error_handlers(app: FastAPI):
 
     @app.exception_handler(InvalidTokenException)
     async def invalid_token_handler(request: Request, exc: InvalidTokenException):
-        logger.warning(f"Invalid token used - Path: {request.url.path}")
+        logger.warning(f"Invalid token - Path: {request.url.path}")
         return error_response(
             message=exc.detail,
             status_code=exc.status_code,
@@ -164,6 +162,15 @@ def register_error_handlers(app: FastAPI):
     @app.exception_handler(EmailAlreadyExistsException)
     async def email_exists_handler(request: Request, exc: EmailAlreadyExistsException):
         logger.warning(f"Email already exists - Path: {request.url.path}")
+        return error_response(
+            message=exc.detail,
+            status_code=exc.status_code,
+            error_code=exc.error_code
+        )
+
+    @app.exception_handler(UsernameAlreadyExistsException)
+    async def username_exists_handler(request: Request, exc: UsernameAlreadyExistsException):
+        logger.warning(f"Username already taken - Path: {request.url.path}")
         return error_response(
             message=exc.detail,
             status_code=exc.status_code,
