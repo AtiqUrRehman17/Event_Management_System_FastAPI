@@ -3,10 +3,11 @@ from sqlalchemy.orm import Session
 from typing import Optional
 from app.dependencies import get_db, get_current_user, get_current_admin
 from app.models.user import User
-from app.schemas.user import UserProfileUpdate, UserResponse, UserListResponse
+from app.schemas.user import UserProfileUpdate
 from app.services.user_service import UserService
 from app.utils.response import success_response, paginated_response
 from app.core.enums import UserRole
+from app.pagination import PaginationParams, get_pagination_params
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
@@ -60,15 +61,14 @@ async def update_current_user_profile(
 
 @router.get("/", response_model=dict)
 async def get_all_users(
-    page: int = Query(1, ge=1),
-    limit: int = Query(10, ge=1, le=100),
+    pagination: PaginationParams = Depends(get_pagination_params),
     role: Optional[UserRole] = None,
     search: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin)
 ):
     """Get all users with pagination (Admin only)"""
-    users, total = UserService.get_all_users(db, page, limit, role, search)
+    users, total = UserService.get_all_users(db, pagination, role, search)
 
     user_responses = [
         {
@@ -89,8 +89,8 @@ async def get_all_users(
     return paginated_response(
         items=user_responses,
         total=total,
-        page=page,
-        limit=limit,
+        page=pagination.page,
+        limit=pagination.limit,
         message="Users retrieved successfully"
     )
 

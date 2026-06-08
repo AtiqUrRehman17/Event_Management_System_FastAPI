@@ -14,16 +14,14 @@ from app.core.exceptions import (
     BookingAlreadyCancelledException
 )
 from app.core.enums import EventStatus, BookingStatus
+from app.pagination import PaginationParams, paginate_query
 import logging
 
 logger = logging.getLogger(__name__)
 
 
 def make_aware(dt: datetime) -> datetime:
-    """
-    Convert naive datetime to UTC aware datetime.
-    If already aware, return as-is.
-    """
+    """Convert naive datetime to UTC aware datetime."""
     if dt is None:
         return None
     if dt.tzinfo is None:
@@ -40,30 +38,24 @@ class BookingService:
         booking_data: BookingCreate
     ) -> Booking:
         """Create a new booking"""
-        # Get event
         event = db.query(Event).filter(Event.id == booking_data.event_id).first()
         if not event:
             raise EventNotFoundException()
 
-        # Check event is upcoming
         if event.status != EventStatus.UPCOMING:
             raise EventNotAvailableException(
                 "Cannot book this event as it is not upcoming"
             )
 
-        # Check event date not in past (handle naive vs aware datetime)
         event_date = make_aware(event.event_date)
         if event_date < datetime.now(timezone.utc):
             raise EventNotAvailableException("Cannot book past events")
 
-        # Check seat availability
         if event.available_seats < booking_data.number_of_seats:
             raise InsufficientSeatsException(event.available_seats)
 
-        # Calculate total price
         total_price = event.price * booking_data.number_of_seats
 
-        # Create booking
         booking = Booking(
             user_id=user_id,
             event_id=booking_data.event_id,
@@ -72,7 +64,6 @@ class BookingService:
             status=BookingStatus.ACTIVE
         )
 
-        # Decrement available seats
         event.available_seats -= booking_data.number_of_seats
 
         db.add(booking)
@@ -93,17 +84,16 @@ class BookingService:
     def get_user_bookings(
         db: Session,
         user_id: int,
-        page: int = 1,
-        limit: int = 10,
+        pagination: PaginationParams,
         status: Optional[BookingStatus] = None
     ) -> Tuple[List[Booking], int, float]:
         """
         Get all bookings for a specific user.
-        total_spent is ALWAYS calculated from ACTIVE bookings only.
+        total_spent always calculated from ALL active bookings.
         """
         base_query = db.query(Booking).filter(Booking.user_id == user_id)
 
-        # Calculate total_spent from ALL active bookings
+        # Calculate total_spent independently
         total_spent_result = db.query(
             func.coalesce(func.sum(Booking.total_price), 0)
         ).filter(
@@ -113,24 +103,22 @@ class BookingService:
 
         total_spent = float(total_spent_result)
 
-        # Apply status filter for listing
+        # Apply status filter
         if status:
             base_query = base_query.filter(Booking.status == status)
 
-        total = base_query.count()
+        # Order before pagination
+        base_query = base_query.order_by(Booking.created_at.desc())
 
-        offset = (page - 1) * limit
-        bookings = base_query.order_by(
-            Booking.created_at.desc()
-        ).offset(offset).limit(limit).all()
+        # Use pagination module
+        bookings, total = paginate_query(base_query, pagination)
 
         return bookings, total, total_spent
 
     @staticmethod
     def get_all_bookings(
         db: Session,
-        page: int = 1,
-        limit: int = 10,
+        pagination: PaginationParams,
         status: Optional[BookingStatus] = None
     ) -> Tuple[List[Booking], int]:
         """Get all bookings (Admin only)"""
@@ -139,11 +127,11 @@ class BookingService:
         if status:
             query = query.filter(Booking.status == status)
 
-        total = query.count()
-        offset = (page - 1) * limit
-        bookings = query.order_by(
-            Booking.created_at.desc()
-        ).offset(offset).limit(limit).all()
+        # Order before pagination
+        query = query.order_by(Booking.created_at.desc())
+
+        # Use pagination module
+        bookings, total = paginate_query(query, pagination)
 
         return bookings, total
 
@@ -157,26 +145,21 @@ class BookingService:
         """Cancel a booking"""
         booking = BookingService.get_booking_by_id(db, booking_id)
 
-        # Check ownership unless admin
         if not is_admin and booking.user_id != user_id:
             raise BookingNotOwnedException()
 
-        # Check if already cancelled
         if booking.status == BookingStatus.CANCELLED:
             raise BookingAlreadyCancelledException()
 
-        # Check event is still upcoming
         event = booking.event
         if event.status != EventStatus.UPCOMING:
             raise EventNotAvailableException(
                 "Cannot cancel booking for completed or cancelled events"
             )
 
-        # Update booking status
         booking.status = BookingStatus.CANCELLED
         booking.cancelled_at = datetime.now(timezone.utc)
 
-        # Return seats back to event
         event.available_seats += booking.number_of_seats
 
         db.commit()
@@ -194,9 +177,7 @@ class BookingService:
 
     @staticmethod
     def get_user_booking_summary(db: Session, user_id: int) -> dict:
-        """
-        Get booking summary using DB aggregation.
-        """
+        """Get booking summary using DB aggregation."""
         active_result = db.query(
             func.count(Booking.id).label("count"),
             func.coalesce(func.sum(Booking.total_price), 0).label("total_spent")

@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Depends, Query, status
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from typing import Optional
+import json
 from app.dependencies import get_db, get_current_user, get_current_admin
 from app.models.user import User
 from app.schemas.booking import BookingCreate
@@ -8,6 +10,7 @@ from app.services.booking_service import BookingService
 from app.services.event_service import EventService
 from app.utils.response import success_response, paginated_response
 from app.core.enums import BookingStatus, UserRole
+from app.pagination import PaginationParams, get_pagination_params
 
 router = APIRouter(prefix="/bookings", tags=["Bookings"])
 
@@ -18,9 +21,7 @@ async def create_booking(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """
-    Book an event for current user
-    """
+    """Book an event for current user"""
     booking = BookingService.create_booking(db, current_user.id, booking_data)
     event = EventService.get_event_by_id(db, booking.event_id)
 
@@ -48,11 +49,7 @@ async def get_my_booking_summary(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """
-    Get summary of current user's bookings.
-    Uses DB aggregation - no large memory loads.
-    Must be declared BEFORE /me to avoid route conflicts.
-    """
+    """Get summary of current user's bookings"""
     summary = BookingService.get_user_booking_summary(db, current_user.id)
 
     return success_response(
@@ -63,18 +60,14 @@ async def get_my_booking_summary(
 
 @router.get("/me", response_model=dict)
 async def get_my_bookings(
-    page: int = Query(1, ge=1),
-    limit: int = Query(10, ge=1, le=100),
+    pagination: PaginationParams = Depends(get_pagination_params),
     status: Optional[BookingStatus] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """
-    Get current user's bookings.
-    total_spent always reflects ALL active bookings regardless of filter.
-    """
+    """Get current user's bookings"""
     bookings, total, total_spent = BookingService.get_user_bookings(
-        db, current_user.id, page, limit, status
+        db, current_user.id, pagination, status
     )
 
     booking_data = []
@@ -95,37 +88,31 @@ async def get_my_bookings(
             "updated_at": booking.updated_at
         })
 
-    # Build paginated response then add total_spent cleanly
+    # Build paginated response then add total_spent
     response = paginated_response(
         items=booking_data,
         total=total,
-        page=page,
-        limit=limit,
+        page=pagination.page,
+        limit=pagination.limit,
         message="Bookings retrieved successfully"
     )
 
-    # Add total_spent into the response body directly
-    response_data = response.body
-    import json
-    body = json.loads(response_data)
+    # Add total_spent to response body
+    body = json.loads(response.body)
     body["total_spent"] = total_spent
 
-    from fastapi.responses import JSONResponse
     return JSONResponse(content=body, status_code=response.status_code)
 
 
 @router.get("/", response_model=dict)
 async def get_all_bookings(
-    page: int = Query(1, ge=1),
-    limit: int = Query(10, ge=1, le=100),
+    pagination: PaginationParams = Depends(get_pagination_params),
     status: Optional[BookingStatus] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin)
 ):
-    """
-    Get all bookings (Admin only)
-    """
-    bookings, total = BookingService.get_all_bookings(db, page, limit, status)
+    """Get all bookings (Admin only)"""
+    bookings, total = BookingService.get_all_bookings(db, pagination, status)
 
     booking_data = []
     for booking in bookings:
@@ -148,8 +135,8 @@ async def get_all_bookings(
     return paginated_response(
         items=booking_data,
         total=total,
-        page=page,
-        limit=limit,
+        page=pagination.page,
+        limit=pagination.limit,
         message="All bookings retrieved successfully"
     )
 
@@ -160,9 +147,7 @@ async def get_event_bookings(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin)
 ):
-    """
-    Get all active bookings for a specific event (Admin only)
-    """
+    """Get all active bookings for a specific event (Admin only)"""
     bookings = BookingService.get_event_bookings(db, event_id)
     event = EventService.get_event_by_id(db, event_id)
 
@@ -195,12 +180,7 @@ async def cancel_booking(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """
-    Cancel a booking.
-    Users can cancel their own bookings.
-    Admins can cancel any booking.
-    """
-    # ✅ Fix: Use enum comparison instead of string comparison
+    """Cancel a booking (Users cancel own, Admin cancels any)"""
     is_admin = current_user.role == UserRole.ADMIN
     booking = BookingService.cancel_booking(db, booking_id, current_user.id, is_admin)
     event = EventService.get_event_by_id(db, booking.event_id)

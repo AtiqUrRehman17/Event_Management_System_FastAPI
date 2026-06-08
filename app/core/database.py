@@ -2,10 +2,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from .config import settings
-import logging
 
-# Disable SQLAlchemy logging
-logging.getLogger('sqlalchemy.engine').setLevel(logging.WARNING)
 
 # Create SQLite engine with proper settings for SQLite
 engine = create_engine(

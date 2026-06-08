@@ -10,16 +10,14 @@ from app.core.exceptions import (
     InvalidStatusTransitionException
 )
 from app.core.enums import EventStatus
+from app.pagination import PaginationParams, paginate_query
 import logging
 
 logger = logging.getLogger(__name__)
 
 
 def make_aware(dt: datetime) -> datetime:
-    """
-    Convert naive datetime to UTC aware datetime.
-    If already aware, return as-is.
-    """
+    """Convert naive datetime to UTC aware datetime."""
     if dt is None:
         return None
     if dt.tzinfo is None:
@@ -58,7 +56,6 @@ class EventService:
                 to_status=new_status.value
             )
 
-        # UPCOMING → COMPLETED only if event date has passed
         if (
             current_status == EventStatus.UPCOMING
             and new_status == EventStatus.COMPLETED
@@ -144,9 +141,10 @@ class EventService:
             query = query.filter(Event.event_date <= params.end_date)
 
         query = query.order_by(Event.event_date)
-        total = query.count()
-        offset = (params.page - 1) * params.limit
-        events = query.offset(offset).limit(params.limit).all()
+
+        # Use pagination module
+        pagination = PaginationParams(page=params.page, limit=params.limit)
+        events, total = paginate_query(query, pagination)
 
         return events, total
 
@@ -160,7 +158,6 @@ class EventService:
         """Update event with status transition validation"""
         event = EventService.get_event_by_id(db, event_id)
 
-        # Validate status transition FIRST
         if event_data.status is not None:
             EventService._validate_status_transition(
                 current_status=event.status,
@@ -177,7 +174,6 @@ class EventService:
         if event_data.location is not None:
             event.location = event_data.location
 
-        # Fix: Use make_aware for date comparison
         if event_data.event_date is not None:
             new_date = make_aware(event_data.event_date)
             if new_date < datetime.now(timezone.utc):
@@ -231,15 +227,10 @@ class EventService:
 
     @staticmethod
     def update_event_status(db: Session) -> int:
-        """
-        Auto-update event statuses.
-        Marks UPCOMING events with past dates as COMPLETED.
-        Handles both naive and aware datetimes from DB.
-        """
+        """Auto-update event statuses."""
         now = datetime.now(timezone.utc)
 
         try:
-            # Get all upcoming events
             upcoming_events = db.query(Event).filter(
                 Event.status == EventStatus.UPCOMING
             ).all()

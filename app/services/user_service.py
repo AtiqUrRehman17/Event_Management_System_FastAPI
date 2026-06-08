@@ -6,6 +6,7 @@ from app.schemas.user import UserUpdate, UserProfileUpdate
 from app.utils.auth_utils import hash_password
 from app.core.exceptions import UserNotFoundException, EmailAlreadyExistsException
 from app.core.enums import UserRole
+from app.pagination import PaginationParams, paginate_query
 
 
 class UserService:
@@ -33,7 +34,6 @@ class UserService:
         """Update user profile"""
         user = UserService.get_user_by_id(db, user_id)
 
-        # Check if email is being changed
         if profile_data.email and profile_data.email != user.email:
             existing_user = UserService.get_user_by_email(db, profile_data.email)
             if existing_user:
@@ -54,8 +54,7 @@ class UserService:
     @staticmethod
     def get_all_users(
         db: Session,
-        page: int = 1,
-        limit: int = 10,
+        pagination: PaginationParams,
         role: Optional[UserRole] = None,
         search: Optional[str] = None
     ) -> Tuple[List[User], int]:
@@ -74,9 +73,8 @@ class UserService:
                 (User.last_name.ilike(search_term))
             )
 
-        total = query.count()
-        offset = (page - 1) * limit
-        users = query.offset(offset).limit(limit).all()
+        # Use pagination module
+        users, total = paginate_query(query, pagination)
 
         return users, total
 

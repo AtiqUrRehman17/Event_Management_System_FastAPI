@@ -18,17 +18,14 @@ async def create_event(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin)
 ):
-    """
-    Create a new event (Admin only)
-    """
+    """Create a new event (Admin only)"""
     event = EventService.create_event(db, event_data, current_user.id)
-    
-    # Get category name if exists
+
     category_name = None
     if event.category_id:
         category = CategoryService.get_category_by_id(db, event.category_id)
         category_name = category.name
-    
+
     return success_response(
         data={
             "id": event.id,
@@ -66,21 +63,17 @@ async def get_all_events(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user_optional)
 ):
-    """
-    Get all events with search/filter/pagination (Public access)
-    """
+    """Get all events with search/filter/pagination (Public access)"""
     from datetime import datetime
-    
-    # Parse dates if provided
+
     start_date_obj = None
     end_date_obj = None
-    
+
     if start_date:
         start_date_obj = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
     if end_date:
         end_date_obj = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
-    
-    # Create search params
+
     params = EventSearchParams(
         search=search,
         category_id=category_id,
@@ -93,16 +86,16 @@ async def get_all_events(
         page=page,
         limit=limit
     )
-    
+
     events, total = EventService.get_all_events(db, params)
-    
+
     event_data = []
     for event in events:
         category_name = None
         if event.category_id:
             category = CategoryService.get_category_by_id(db, event.category_id)
             category_name = category.name
-        
+
         event_data.append({
             "id": event.id,
             "title": event.title,
@@ -119,7 +112,7 @@ async def get_all_events(
             "created_at": event.created_at,
             "updated_at": event.updated_at
         })
-    
+
     return paginated_response(
         items=event_data,
         total=total,
@@ -135,16 +128,14 @@ async def get_event(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user_optional)
 ):
-    """
-    Get event by ID (Public access)
-    """
+    """Get event by ID (Public access)"""
     event = EventService.get_event_by_id(db, event_id)
-    
+
     category_name = None
     if event.category_id:
         category = CategoryService.get_category_by_id(db, event.category_id)
         category_name = category.name
-    
+
     return success_response(
         data={
             "id": event.id,
@@ -174,16 +165,14 @@ async def update_event(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin)
 ):
-    """
-    Update event (Admin only)
-    """
+    """Update event (Admin only)"""
     event = EventService.update_event(db, event_id, event_data, current_user.id)
-    
+
     category_name = None
     if event.category_id:
         category = CategoryService.get_category_by_id(db, event.category_id)
         category_name = category.name
-    
+
     return success_response(
         data={
             "id": event.id,
@@ -211,11 +200,9 @@ async def delete_event(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin)
 ):
-    """
-    Delete event (Admin only)
-    """
+    """Delete event (Admin only)"""
     EventService.delete_event(db, event_id)
-    
+
     return success_response(
         data=None,
         message="Event deleted successfully"

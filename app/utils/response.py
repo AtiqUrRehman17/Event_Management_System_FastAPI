@@ -5,6 +5,8 @@ from datetime import datetime, date
 from enum import Enum
 import json
 
+from app.pagination import create_pagination_meta
+
 
 class CustomJSONEncoder(json.JSONEncoder):
     """
@@ -35,8 +37,6 @@ def serialize(data: Any) -> Any:
     """
     if data is None:
         return None
-    # Serialize to JSON string using custom encoder
-    # then parse back to Python dict/list
     json_str = json.dumps(data, cls=CustomJSONEncoder)
     return json.loads(json_str)
 
@@ -99,15 +99,12 @@ def paginated_response(
 ) -> JSONResponse:
     """
     Paginated response formatter.
-    Calculates total_pages automatically.
+    Uses pagination module for consistent metadata.
     """
+    meta = create_pagination_meta(total=total, page=page, limit=limit)
+
     return success_response(
         data=serialize(items),
         message=message,
-        meta={
-            "total": total,
-            "page": page,
-            "limit": limit,
-            "total_pages": (total + limit - 1) // limit if total > 0 else 0
-        }
+        meta=meta
     )
