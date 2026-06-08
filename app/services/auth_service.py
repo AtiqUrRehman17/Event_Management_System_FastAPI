@@ -21,16 +21,26 @@ logger = logging.getLogger(__name__)
 class AuthService:
 
     @staticmethod
+    def _build_user_info(user: User) -> dict:
+        """
+        Build user info dict to include in JWT token.
+        Contains only non-sensitive data.
+        """
+        return {
+            "username": user.username,
+            "email": user.email,
+            "role": user.role.value if hasattr(user.role, 'value') else str(user.role)
+        }
+
+    @staticmethod
     def register_user(db: Session, user_data: RegisterRequest) -> User:
         """Register a new user with unique username and email"""
-        # Check if username already taken
         existing_username = db.query(User).filter(
             User.username == user_data.username.lower()
         ).first()
         if existing_username:
             raise UsernameAlreadyExistsException()
 
-        # Check if email already taken
         existing_email = db.query(User).filter(
             User.email == user_data.email
         ).first()
@@ -56,10 +66,7 @@ class AuthService:
 
     @staticmethod
     def login_user(db: Session, login_data: LoginRequest) -> Tuple[User, str, str]:
-        """
-        Authenticate user using username and password.
-        """
-        # Find user by username
+        """Authenticate user using username and password"""
         user = db.query(User).filter(
             User.username == login_data.username.lower()
         ).first()
@@ -72,8 +79,16 @@ class AuthService:
         if not user.is_active:
             raise InvalidCredentialsException()
 
-        access_token = Security.create_access_token(data={"sub": str(user.id)})
-        refresh_token = Security.create_refresh_token(data={"sub": str(user.id)})
+        user_info = AuthService._build_user_info(user)
+
+        access_token = Security.create_access_token(
+            data={"sub": str(user.id)},
+            user_info=user_info
+        )
+        refresh_token = Security.create_refresh_token(
+            data={"sub": str(user.id)},
+            user_info=user_info
+        )
 
         return user, access_token, refresh_token
 
@@ -99,8 +114,16 @@ class AuthService:
             expires_at=datetime.fromtimestamp(payload["exp"], tz=timezone.utc)
         )
 
-        new_access_token = Security.create_access_token(data={"sub": str(user.id)})
-        new_refresh_token = Security.create_refresh_token(data={"sub": str(user.id)})
+        user_info = AuthService._build_user_info(user)
+
+        new_access_token = Security.create_access_token(
+            data={"sub": str(user.id)},
+            user_info=user_info
+        )
+        new_refresh_token = Security.create_refresh_token(
+            data={"sub": str(user.id)},
+            user_info=user_info
+        )
 
         return new_access_token, new_refresh_token
 
