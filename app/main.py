@@ -48,9 +48,22 @@ def run_cleanup_expired_tokens():
     try:
         count = AuthService.cleanup_expired_tokens(db)
         if count > 0:
-            logger.info(f"Scheduler: Cleaned up {count} expired token(s)")
+            logger.info(f"Scheduler: Cleaned up {count} expired blacklisted token(s)")
     except Exception as e:
         logger.error(f"Scheduler: Token cleanup failed - {str(e)}")
+    finally:
+        db.close()
+
+
+def run_cleanup_reset_tokens():
+    """Scheduler job: clean up expired reset tokens every 12 hours"""
+    db = SessionLocal()
+    try:
+        count = AuthService.cleanup_expired_reset_tokens(db)
+        if count > 0:
+            logger.info(f"Scheduler: Cleaned up {count} expired/used reset token(s)")
+    except Exception as e:
+        logger.error(f"Scheduler: Reset token cleanup failed - {str(e)}")
     finally:
         db.close()
 
@@ -92,8 +105,16 @@ async def lifespan(app: FastAPI):
         replace_existing=True
     )
 
+    scheduler.add_job(
+        run_cleanup_reset_tokens,
+        trigger=IntervalTrigger(hours=12),
+        id="cleanup_reset_tokens",
+        name="Clean up expired reset tokens",
+        replace_existing=True
+    )
+
     scheduler.start()
-    logger.info("Scheduler started with 2 jobs")
+    logger.info("Scheduler started with 3 jobs")
     logger.info("Event Management System is ready!")
 
     yield
@@ -113,7 +134,7 @@ app = FastAPI(
     docs_url="/docs" if settings.DEBUG else None,
     redoc_url="/redoc" if settings.DEBUG else None,
     swagger_ui_parameters={
-        "persistAuthorization": False,  # ← CHANGED: Don't persist tokens
+        "persistAuthorization": False,
     }
 )
 
@@ -133,7 +154,6 @@ def custom_openapi():
         routes=app.routes,
     )
 
-    # Add security scheme definition only
     openapi_schema["components"] = openapi_schema.get("components", {})
     openapi_schema["components"]["securitySchemes"] = {
         "BearerAuth": {
@@ -143,8 +163,6 @@ def custom_openapi():
             "description": "Login via /api/v1/auth/login to get token. Then enter token here."
         }
     }
-
-    # DO NOT apply security globally
 
     app.openapi_schema = openapi_schema
     return app.openapi_schema
