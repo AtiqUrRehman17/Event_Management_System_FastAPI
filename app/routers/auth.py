@@ -4,7 +4,13 @@ from typing import Optional
 from sqlalchemy.orm import Session
 from app.dependencies import get_db, get_current_user
 from app.models.user import User
-from app.schemas.auth import LoginRequest, RegisterRequest, TokenRefresh
+from app.schemas.auth import (
+    LoginRequest, 
+    RegisterRequest, 
+    TokenRefresh,
+    ForgotPasswordRequest,
+    ResetPasswordRequest
+)
 from app.services.auth_service import AuthService
 from app.utils.response import success_response
 
@@ -60,6 +66,39 @@ async def login(
             "token_type": "bearer"
         },
         message="Login successful"
+    )
+
+
+@router.post("/forgot-password", response_model=dict)
+async def forgot_password(
+    request: ForgotPasswordRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Request password reset.
+    Sends an email with a reset token to the user's email address.
+    Use the token with POST /auth/reset-password to set new password.
+    """
+    result = AuthService.forgot_password(db, request)
+    return success_response(
+        data=result,
+        message="Password reset email processed"
+    )
+
+
+@router.post("/reset-password", response_model=dict)
+async def reset_password(
+    request: ResetPasswordRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Reset password using token received via email.
+    Provide the token and your new password.
+    """
+    result = AuthService.reset_password(db, request)
+    return success_response(
+        data=result,
+        message="Password reset successful"
     )
 
 

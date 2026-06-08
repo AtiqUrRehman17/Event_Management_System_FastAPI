@@ -4,34 +4,12 @@ import re
 
 
 class LoginRequest(BaseModel):
-    username: str = Field(
-        ...,
-        min_length=3,
-        max_length=50,
-        description="Your username"
-    )
-    password: str = Field(
-        ...,
-        min_length=1,
-        description="Your password"
-    )
-
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "username": "username",
-                "password": "password"
-            }
-        }
+    username: str = Field(..., min_length=3, max_length=50)
+    password: str = Field(..., min_length=1)
 
 
 class RegisterRequest(BaseModel):
-    username: str = Field(
-        ...,
-        min_length=3,
-        max_length=50,
-        description="Unique username (letters, numbers, underscores only)"
-    )
+    username: str = Field(..., min_length=3, max_length=50)
     email: EmailStr
     password: str = Field(..., min_length=8)
     first_name: str = Field(..., min_length=2, max_length=50)
@@ -41,18 +19,40 @@ class RegisterRequest(BaseModel):
     def validate_username(cls, v):
         if not re.match(r'^[a-zA-Z0-9_]+$', v):
             raise ValueError('Username can only contain letters, numbers, and underscores')
-        return v.lower()  # Store username in lowercase
+        return v.lower()
 
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "username": "johndoe",
-                "email": "john@example.com",
-                "password": "John@1234",
-                "first_name": "John",
-                "last_name": "Doe"
-            }
-        }
+
+class ForgotPasswordRequest(BaseModel):
+    """Request to send password reset email"""
+    email: EmailStr = Field(..., description="Registered email address")
+
+
+class ResetPasswordRequest(BaseModel):
+    """Request to reset password using token"""
+    token: str = Field(..., description="Reset token received via email")
+    new_password: str = Field(..., min_length=8, description="New password")
+    confirm_password: str = Field(..., min_length=8, description="Confirm new password")
+
+    @field_validator('confirm_password')
+    def passwords_match(cls, v, info):
+        """Validate that confirm_password matches new_password"""
+        new_password = info.data.get('new_password')
+        if new_password is not None and v != new_password:
+            raise ValueError('Passwords do not match')
+        return v
+
+    @field_validator('new_password')
+    def validate_password_strength(cls, v):
+        """Validate password strength"""
+        if len(v) < 8:
+            raise ValueError('Password must be at least 8 characters long')
+        if not re.search(r'[A-Z]', v):
+            raise ValueError('Password must contain at least one uppercase letter')
+        if not re.search(r'[a-z]', v):
+            raise ValueError('Password must contain at least one lowercase letter')
+        if not re.search(r'\d', v):
+            raise ValueError('Password must contain at least one digit')
+        return v
 
 
 class Token(BaseModel):

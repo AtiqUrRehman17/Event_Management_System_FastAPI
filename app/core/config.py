@@ -30,9 +30,25 @@ class Settings(BaseSettings):
     ADMIN_FIRST_NAME: str = "Super"
     ADMIN_LAST_NAME: str = "Admin"
 
+    # Email Configuration (Support both Gmail and Postmark)
+    DEFAULT_FROM_EMAIL: str = ""
+    EMAIL_HOST: str = "smtp.gmail.com"  # Default
+    EMAIL_PORT: int = 587
+    EMAIL_USE_TLS: bool = True
+    EMAIL_HOST_USER: str = ""
+    EMAIL_HOST_PASSWORD: str = ""
+    POSTMARK_API_TOKEN: Optional[str] = None
+    
+    # Email Provider Type: "smtp" or "postmark"
+    EMAIL_PROVIDER: str = "postmark"  # "smtp" or "postmark"
+
+    # Reset Token Configuration
+    RESET_TOKEN_EXPIRE_MINUTES: int = 30
+
     class Config:
         env_file = ".env"
         case_sensitive = True
+        extra = "ignore"
 
 
 settings = Settings()
