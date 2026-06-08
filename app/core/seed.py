@@ -29,7 +29,12 @@ def seed_admin(db: Session) -> None:
             first_name=settings.ADMIN_FIRST_NAME,
             last_name=settings.ADMIN_LAST_NAME,
             role=UserRole.ADMIN,
-            is_active=True
+            is_active=True,
+            is_verified=True,  # Admin is auto-verified
+            phone=None,
+            bio="System Administrator",
+            timezone="UTC",
+            profile_picture=None
         )
 
         db.add(admin)
