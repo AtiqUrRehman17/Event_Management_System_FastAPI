@@ -35,7 +35,6 @@ class ResetPasswordRequest(BaseModel):
 
     @field_validator('confirm_password')
     def passwords_match(cls, v, info):
-        """Validate that confirm_password matches new_password"""
         new_password = info.data.get('new_password')
         if new_password is not None and v != new_password:
             raise ValueError('Passwords do not match')
@@ -43,7 +42,6 @@ class ResetPasswordRequest(BaseModel):
 
     @field_validator('new_password')
     def validate_password_strength(cls, v):
-        """Validate password strength"""
         if len(v) < 8:
             raise ValueError('Password must be at least 8 characters long')
         if not re.search(r'[A-Z]', v):
@@ -53,6 +51,16 @@ class ResetPasswordRequest(BaseModel):
         if not re.search(r'\d', v):
             raise ValueError('Password must contain at least one digit')
         return v
+
+
+class EmailVerificationRequest(BaseModel):
+    """Request to verify email with token"""
+    token: str = Field(..., description="Verification token received via email")
+
+
+class ResendVerificationRequest(BaseModel):
+    """Request to resend verification email"""
+    email: EmailStr = Field(..., description="Registered email address")
 
 
 class Token(BaseModel):

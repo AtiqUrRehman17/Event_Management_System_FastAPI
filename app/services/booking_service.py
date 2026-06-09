@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import List, Tuple, Optional
-from datetime import datetime, timezone
+from datetime import datetime, timedelta
 from app.models.booking import Booking
 from app.models.event import Event
 from app.schemas.booking import BookingCreate
@@ -15,18 +15,10 @@ from app.core.exceptions import (
 )
 from app.core.enums import EventStatus, BookingStatus
 from app.pagination import PaginationParams, paginate_query
+from app.utils.datetime_utils import get_current_utc
 import logging
 
 logger = logging.getLogger(__name__)
-
-
-def make_aware(dt: datetime) -> datetime:
-    """Convert naive datetime to UTC aware datetime."""
-    if dt is None:
-        return None
-    if dt.tzinfo is None:
-        return dt.replace(tzinfo=timezone.utc)
-    return dt
 
 
 class BookingService:
@@ -42,20 +34,32 @@ class BookingService:
         if not event:
             raise EventNotFoundException()
 
+        # Check event status
         if event.status != EventStatus.UPCOMING:
             raise EventNotAvailableException(
                 "Cannot book this event as it is not upcoming"
             )
 
-        event_date = make_aware(event.event_date)
-        if event_date < datetime.now(timezone.utc):
+        # Get current UTC time (timezone-naive for SQLite comparison)
+        now = get_current_utc()
+        
+        # Convert event_date to timezone-naive if it has timezone
+        event_date = event.event_date
+        if hasattr(event_date, 'tzinfo') and event_date.tzinfo is not None:
+            event_date = event_date.replace(tzinfo=None)
+        
+        # Check if event is in the past
+        if event_date < now:
             raise EventNotAvailableException("Cannot book past events")
 
+        # Check seat availability
         if event.available_seats < booking_data.number_of_seats:
             raise InsufficientSeatsException(event.available_seats)
 
+        # Calculate total price
         total_price = event.price * booking_data.number_of_seats
 
+        # Create booking
         booking = Booking(
             user_id=user_id,
             event_id=booking_data.event_id,
@@ -64,6 +68,7 @@ class BookingService:
             status=BookingStatus.ACTIVE
         )
 
+        # Update available seats
         event.available_seats -= booking_data.number_of_seats
 
         db.add(booking)
@@ -152,14 +157,18 @@ class BookingService:
             raise BookingAlreadyCancelledException()
 
         event = booking.event
+        
+        # Check if event is still upcoming
         if event.status != EventStatus.UPCOMING:
             raise EventNotAvailableException(
                 "Cannot cancel booking for completed or cancelled events"
             )
 
+        # Update booking status
         booking.status = BookingStatus.CANCELLED
-        booking.cancelled_at = datetime.now(timezone.utc)
+        booking.cancelled_at = get_current_utc()
 
+        # Return seats to event
         event.available_seats += booking.number_of_seats
 
         db.commit()

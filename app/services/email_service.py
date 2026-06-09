@@ -82,7 +82,6 @@ class EmailService:
     ) -> bool:
         """Send email via Postmark API"""
         try:
-            # Use Postmark API (more reliable than SMTP)
             url = "https://api.postmarkapp.com/email"
             
             headers = {
@@ -114,13 +113,221 @@ class EmailService:
             return False
 
     @staticmethod
+    def send_verification_email(to_email: str, username: str, verification_token: str) -> bool:
+        """
+        Send email verification link to user with the token
+        """
+        api_verify_endpoint = "/api/v1/auth/verify-email"
+
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <style>
+                body {{
+                    font-family: Arial, sans-serif;
+                    line-height: 1.6;
+                    color: #333;
+                    max-width: 600px;
+                    margin: 0 auto;
+                    padding: 20px;
+                }}
+                .header {{
+                    background-color: #2196F3;
+                    color: white;
+                    padding: 20px;
+                    text-align: center;
+                    border-radius: 5px 5px 0 0;
+                }}
+                .content {{
+                    background-color: #f9f9f9;
+                    padding: 30px;
+                    border: 1px solid #ddd;
+                    border-top: none;
+                    border-radius: 0 0 5px 5px;
+                }}
+                .token-box {{
+                    background-color: #f0f0f0;
+                    padding: 15px;
+                    border-radius: 5px;
+                    font-family: monospace;
+                    font-size: 18px;
+                    font-weight: bold;
+                    word-break: break-all;
+                    margin: 20px 0;
+                    border-left: 4px solid #2196F3;
+                    text-align: center;
+                }}
+                .footer {{
+                    margin-top: 20px;
+                    font-size: 12px;
+                    color: #777;
+                    text-align: center;
+                }}
+                .warning {{
+                    color: #e74c3c;
+                    font-size: 14px;
+                    margin-top: 20px;
+                }}
+                .instruction {{
+                    background-color: #e8f4fd;
+                    padding: 15px;
+                    border-radius: 5px;
+                    margin: 20px 0;
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <h2>Welcome to Event Management System!</h2>
+            </div>
+            <div class="content">
+                <p>Hello <strong>{username}</strong>,</p>
+                <p>Thank you for registering with Event Management System. Please verify your email address to activate your account.</p>
+                
+                <div class="instruction">
+                    <h3>Your Verification Token:</h3>
+                    <div class="token-box">
+                        {verification_token}
+                    </div>
+                    <p>To verify your email, make a POST request to:</p>
+                    <code>POST {api_verify_endpoint}</code>
+                    <p>With JSON body:</p>
+                    <code>{{"token": "{verification_token}"}}</code>
+                </div>
+                
+                <p class="warning"><strong>⚠️ This verification token will expire in {settings.VERIFICATION_TOKEN_EXPIRE_MINUTES} minutes ({int(settings.VERIFICATION_TOKEN_EXPIRE_MINUTES / 60)} hours).</strong></p>
+                <p>If you didn't create an account with us, please ignore this email.</p>
+                <hr>
+                <p>Once verified, you'll have full access to all features including booking events and managing your profile.</p>
+            </div>
+            <div class="footer">
+                <p>Event Management System &copy; 2024 | Email Verification</p>
+            </div>
+        </body>
+        </html>
+        """
+
+        text_content = f"""
+        Welcome to Event Management System!
+
+        Hello {username},
+
+        Thank you for registering. Please verify your email address to activate your account.
+
+        Your Verification Token: {verification_token}
+
+        To verify your email, make a POST request to:
+        API Endpoint: {api_verify_endpoint}
+        
+        Request Body:
+        {{
+            "token": "{verification_token}"
+        }}
+
+        This verification token will expire in {settings.VERIFICATION_TOKEN_EXPIRE_MINUTES} minutes ({int(settings.VERIFICATION_TOKEN_EXPIRE_MINUTES / 60)} hours).
+
+        If you didn't create an account with us, please ignore this email.
+
+        Event Management System
+        """
+
+        return EmailService.send_email(
+            to_email=to_email,
+            subject="Verify Your Email - Event Management System",
+            html_content=html_content,
+            text_content=text_content
+        )
+
+    @staticmethod
+    def send_verification_confirmation(to_email: str, username: str) -> bool:
+        """Send confirmation email after successful email verification"""
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <style>
+                body {{
+                    font-family: Arial, sans-serif;
+                    line-height: 1.6;
+                    color: #333;
+                    max-width: 600px;
+                    margin: 0 auto;
+                    padding: 20px;
+                }}
+                .header {{
+                    background-color: #4CAF50;
+                    color: white;
+                    padding: 20px;
+                    text-align: center;
+                    border-radius: 5px 5px 0 0;
+                }}
+                .content {{
+                    background-color: #f9f9f9;
+                    padding: 30px;
+                    border: 1px solid #ddd;
+                    border-top: none;
+                    border-radius: 0 0 5px 5px;
+                }}
+                .footer {{
+                    margin-top: 20px;
+                    font-size: 12px;
+                    color: #777;
+                    text-align: center;
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <h2>Email Verified Successfully!</h2>
+            </div>
+            <div class="content">
+                <p>Hello <strong>{username}</strong>,</p>
+                <p>Your email address has been successfully verified.</p>
+                <p>You can now:</p>
+                <ul>
+                    <li>Login to your account</li>
+                    <li>Browse and book events</li>
+                    <li>Manage your profile</li>
+                    <li>View your booking history</li>
+                </ul>
+                <p>Thank you for joining Event Management System!</p>
+            </div>
+            <div class="footer">
+                <p>Event Management System &copy; 2024 | Email Verified</p>
+            </div>
+        </body>
+        </html>
+        """
+
+        text_content = f"""
+        Email Verified Successfully!
+
+        Hello {username},
+
+        Your email address has been successfully verified.
+
+        You can now login to your account and start using all features of Event Management System.
+
+        Thank you for joining!
+
+        Event Management System
+        """
+
+        return EmailService.send_email(
+            to_email=to_email,
+            subject="Email Verified Successfully - Event Management System",
+            html_content=html_content,
+            text_content=text_content
+        )
+
+    @staticmethod
     def send_password_reset_email(to_email: str, username: str, reset_token: str) -> bool:
-        """
-        Send password reset email with reset token
-        """
+        """Send password reset email with reset token"""
         api_reset_endpoint = "/api/v1/auth/reset-password"
 
-        # HTML email template (same as before)
         html_content = f"""
         <!DOCTYPE html>
         <html>
@@ -154,10 +361,12 @@ class EmailService:
                     padding: 15px;
                     border-radius: 5px;
                     font-family: monospace;
-                    font-size: 16px;
+                    font-size: 18px;
+                    font-weight: bold;
                     word-break: break-all;
                     margin: 20px 0;
                     border-left: 4px solid #4CAF50;
+                    text-align: center;
                 }}
                 .footer {{
                     margin-top: 20px;
@@ -178,28 +387,19 @@ class EmailService:
             </div>
             <div class="content">
                 <p>Hello <strong>{username}</strong>,</p>
-                <p>We received a request to reset your password for your Event Management System account.</p>
-                <p>Use the token below to reset your password:</p>
+                <p>We received a request to reset your password.</p>
                 <div class="token-box">
-                    <strong>Reset Token:</strong> {reset_token}
+                    {reset_token}
                 </div>
                 <p>To reset your password, make a POST request to:</p>
-                <div class="token-box">
-                    <strong>API Endpoint:</strong> {api_reset_endpoint}<br>
-                    <strong>Request Body:</strong><br>
-                    {{<br>
-                    &nbsp;&nbsp;"token": "{reset_token}",<br>
-                    &nbsp;&nbsp;"new_password": "your_new_password",<br>
-                    &nbsp;&nbsp;"confirm_password": "your_new_password"<br>
-                    }}
-                </div>
+                <code>POST {api_reset_endpoint}</code>
+                <p>With JSON body:</p>
+                <code>{{"token": "{reset_token}", "new_password": "your_new_password", "confirm_password": "your_new_password"}}</code>
                 <p class="warning"><strong>⚠️ This token will expire in {settings.RESET_TOKEN_EXPIRE_MINUTES} minutes.</strong></p>
-                <p>If you didn't request this password reset, please ignore this email. Your password will remain unchanged.</p>
-                <hr>
-                <p>For security reasons, never share this token with anyone.</p>
+                <p>If you didn't request this password reset, please ignore this email.</p>
             </div>
             <div class="footer">
-                <p>Event Management System &copy; 2024 | Secure Password Reset</p>
+                <p>Event Management System &copy; 2024 | Password Reset</p>
             </div>
         </body>
         </html>
@@ -210,15 +410,13 @@ class EmailService:
 
         Hello {username},
 
-        We received a request to reset your password for your Event Management System account.
+        We received a request to reset your password.
 
-        Use the token below to reset your password:
-
-        Reset Token: {reset_token}
+        Your Reset Token: {reset_token}
 
         To reset your password, make a POST request to:
         API Endpoint: {api_reset_endpoint}
-
+        
         Request Body:
         {{
             "token": "{reset_token}",
@@ -242,9 +440,7 @@ class EmailService:
 
     @staticmethod
     def send_password_reset_confirmation(to_email: str, username: str) -> bool:
-        """
-        Send confirmation email after successful password reset
-        """
+        """Send confirmation email after successful password reset"""
         html_content = f"""
         <!DOCTYPE html>
         <html>
@@ -290,14 +486,7 @@ class EmailService:
                 <p>Your password has been successfully changed.</p>
                 <p>If you made this change, you can now log in with your new password.</p>
                 <p><strong>If you did not change your password:</strong></p>
-                <p>Please contact our support team immediately to secure your account.</p>
-                <hr>
-                <p>For security reasons, we recommend:</p>
-                <ul>
-                    <li>Use a strong, unique password</li>
-                    <li>Never share your password with anyone</li>
-                    <li>Enable two-factor authentication if available</li>
-                </ul>
+                <p>Please contact our support team immediately.</p>
             </div>
             <div class="footer">
                 <p>Event Management System &copy; 2024 | Password Changed</p>
