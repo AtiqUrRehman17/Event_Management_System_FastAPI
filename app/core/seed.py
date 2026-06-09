@@ -34,7 +34,9 @@ def seed_admin(db: Session) -> None:
             phone=None,
             bio="System Administrator",
             timezone="UTC",
-            profile_picture=None
+            profile_picture=None,
+            oauth_provider=None,
+            oauth_id=None
         )
 
         db.add(admin)

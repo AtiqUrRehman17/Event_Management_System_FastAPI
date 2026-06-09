@@ -23,12 +23,10 @@ class RegisterRequest(BaseModel):
 
 
 class ForgotPasswordRequest(BaseModel):
-    """Request to send password reset email"""
     email: EmailStr = Field(..., description="Registered email address")
 
 
 class ResetPasswordRequest(BaseModel):
-    """Request to reset password using token"""
     token: str = Field(..., description="Reset token received via email")
     new_password: str = Field(..., min_length=8, description="New password")
     confirm_password: str = Field(..., min_length=8, description="Confirm new password")
@@ -54,13 +52,28 @@ class ResetPasswordRequest(BaseModel):
 
 
 class EmailVerificationRequest(BaseModel):
-    """Request to verify email with token"""
     token: str = Field(..., description="Verification token received via email")
 
 
 class ResendVerificationRequest(BaseModel):
-    """Request to resend verification email"""
     email: EmailStr = Field(..., description="Registered email address")
+
+
+class GoogleAuthRequest(BaseModel):
+    """Request to exchange Google authorization code for tokens"""
+    code: str = Field(..., description="Authorization code from Google")
+    redirect_uri: Optional[str] = Field(None, description="Redirect URI used")
+
+
+class GoogleAuthResponse(BaseModel):
+    """Response after Google OAuth login"""
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"
+    user_id: int
+    email: str
+    username: str
+    is_new_user: bool
 
 
 class Token(BaseModel):
