@@ -65,78 +65,78 @@ A comprehensive Event Management System built with FastAPI, featuring JWT authen
 ## Project Structure
 event-management-system/
 ├── app/
-│ ├── init.py
-│ ├── main.py # FastAPI application entry point
-│ │
-│ ├── core/ # Core configuration
-│ │ ├── init.py
-│ │ ├── config.py # App settings & environment variables
-│ │ ├── database.py # Database connection & session
-│ │ ├── enums.py # UserRole, EventStatus, BookingStatus
-│ │ ├── exceptions.py # Custom exception classes
-│ │ ├── security.py # JWT token creation & verification
-│ │ └── seed.py # Default admin user seeding
-│ │
-│ ├── models/ # SQLAlchemy ORM models
-│ │ ├── init.py
-│ │ ├── user.py # User model (with OAuth fields)
-│ │ ├── event.py # Event model
-│ │ ├── booking.py # Booking model
-│ │ ├── category.py # Category model
-│ │ ├── token_blacklist.py # Token blacklist model
-│ │ ├── password_reset_token.py # Password reset tokens
-│ │ └── email_verification_token.py # Email verification tokens
-│ │
-│ ├── schemas/ # Pydantic models
-│ │ ├── init.py
-│ │ ├── auth.py # Authentication schemas
-│ │ ├── user.py # User schemas
-│ │ ├── event.py # Event schemas
-│ │ ├── booking.py # Booking schemas
-│ │ └── category.py # Category schemas
-│ │
-│ ├── routers/ # API route handlers
-│ │ ├── init.py
-│ │ ├── auth.py # Login, register, refresh, logout
-│ │ ├── users.py # User profile & management
-│ │ ├── events.py # Event CRUD & search
-│ │ ├── bookings.py # Booking operations
-│ │ ├── categories.py # Category management
-│ │ └── oauth.py # Google & LinkedIn OAuth
-│ │
-│ ├── services/ # Business logic layer
-│ │ ├── init.py
-│ │ ├── auth_service.py # Authentication logic
-│ │ ├── user_service.py # User management logic
-│ │ ├── event_service.py # Event management logic
-│ │ ├── booking_service.py # Booking management logic
-│ │ ├── category_service.py # Category management logic
-│ │ ├── email_service.py # Email sending service
-│ │ ├── oauth_service.py # Google OAuth logic
-│ │ └── linkedin_oauth_service.py # LinkedIn OAuth logic
-│ │
-│ ├── dependencies/ # FastAPI dependencies
-│ │ ├── init.py
-│ │ ├── auth.py # get_current_user, get_current_admin
-│ │ └── db.py # get_db session
-│ │
-│ ├── pagination/ # Pagination module
-│ │ ├── init.py
-│ │ └── pagination.py # PaginationParams, paginate_query
-│ │
-│ └── utils/ # Utility functions
-│ ├── init.py
-│ ├── auth_utils.py # Password hashing & verification
-│ ├── response.py # Standardized API responses
-│ ├── error_handlers.py # Global exception handlers
-│ ├── validators.py # Input validation functions
-│ └── datetime_utils.py # Datetime utilities
+│   ├── __init__.py
+│   ├── main.py                          # FastAPI application entry point
+│   │
+│   ├── core/                            # Core configuration
+│   │   ├── __init__.py
+│   │   ├── config.py                    # App settings & environment variables
+│   │   ├── database.py                  # Database connection & session
+│   │   ├── enums.py                     # UserRole, EventStatus, BookingStatus
+│   │   ├── exceptions.py                # Custom exception classes
+│   │   ├── security.py                  # JWT token creation & verification
+│   │   └── seed.py                      # Default admin user seeding
+│   │
+│   ├── models/                          # SQLAlchemy ORM models
+│   │   ├── __init__.py
+│   │   ├── user.py                      # User model (with OAuth fields)
+│   │   ├── event.py                     # Event model
+│   │   ├── booking.py                   # Booking model
+│   │   ├── category.py                  # Category model
+│   │   ├── token_blacklist.py           # Token blacklist model
+│   │   ├── password_reset_token.py      # Password reset tokens
+│   │   └── email_verification_token.py  # Email verification tokens
+│   │
+│   ├── schemas/                         # Pydantic models
+│   │   ├── __init__.py
+│   │   ├── auth.py                      # Authentication schemas
+│   │   ├── user.py                      # User schemas
+│   │   ├── event.py                     # Event schemas
+│   │   ├── booking.py                   # Booking schemas
+│   │   └── category.py                  # Category schemas
+│   │
+│   ├── routers/                         # API route handlers
+│   │   ├── __init__.py
+│   │   ├── auth.py                      # Login, register, refresh, logout
+│   │   ├── users.py                     # User profile & management
+│   │   ├── events.py                    # Event CRUD & search
+│   │   ├── bookings.py                  # Booking operations
+│   │   ├── categories.py                # Category management
+│   │   └── oauth.py                     # Google & LinkedIn OAuth
+│   │
+│   ├── services/                        # Business logic layer
+│   │   ├── __init__.py
+│   │   ├── auth_service.py              # Authentication logic
+│   │   ├── user_service.py              # User management logic
+│   │   ├── event_service.py             # Event management logic
+│   │   ├── booking_service.py           # Booking management logic
+│   │   ├── category_service.py          # Category management logic
+│   │   ├── email_service.py             # Email sending service
+│   │   ├── oauth_service.py             # Google OAuth logic
+│   │   └── linkedin_oauth_service.py    # LinkedIn OAuth logic
+│   │
+│   ├── dependencies/                    # FastAPI dependencies
+│   │   ├── __init__.py
+│   │   ├── auth.py                      # get_current_user, get_current_admin
+│   │   └── db.py                        # get_db session
+│   │
+│   ├── pagination/                      # Pagination module
+│   │   ├── __init__.py
+│   │   └── pagination.py               # PaginationParams, paginate_query
+│   │
+│   └── utils/                           # Utility functions
+│       ├── __init__.py
+│       ├── auth_utils.py                # Password hashing & verification
+│       ├── response.py                  # Standardized API responses
+│       ├── error_handlers.py            # Global exception handlers
+│       ├── validators.py                # Input validation functions
+│       └── datetime_utils.py           # Datetime utilities
 │
-├── .env # Environment variables
-├── .gitignore # Git ignore file
-├── requirements.txt # Project dependencies
-├── run.py # Server startup script
-└── README.md # This file
+├── .env                                 # Environment variables
+├── .gitignore                           # Git ignore file
+├── requirements.txt                     # Project dependencies
+├── run.py                               # Server startup script
+└── README.md                            # This file
 
 
 
