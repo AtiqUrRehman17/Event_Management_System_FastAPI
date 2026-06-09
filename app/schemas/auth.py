@@ -60,20 +60,13 @@ class ResendVerificationRequest(BaseModel):
 
 
 class GoogleAuthRequest(BaseModel):
-    """Request to exchange Google authorization code for tokens"""
     code: str = Field(..., description="Authorization code from Google")
     redirect_uri: Optional[str] = Field(None, description="Redirect URI used")
 
 
-class GoogleAuthResponse(BaseModel):
-    """Response after Google OAuth login"""
-    access_token: str
-    refresh_token: str
-    token_type: str = "bearer"
-    user_id: int
-    email: str
-    username: str
-    is_new_user: bool
+class LinkedInAuthRequest(BaseModel):
+    code: str = Field(..., description="Authorization code from LinkedIn")
+    redirect_uri: Optional[str] = Field(None, description="Redirect URI used")
 
 
 class Token(BaseModel):

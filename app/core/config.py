@@ -38,7 +38,7 @@ class Settings(BaseSettings):
     EMAIL_HOST_USER: str = ""
     EMAIL_HOST_PASSWORD: str = ""
     POSTMARK_API_TOKEN: Optional[str] = None
-    EMAIL_PROVIDER: str = "posmarkapp"
+    EMAIL_PROVIDER: str = "postmarkapp"
 
     # Reset Token Configuration
     RESET_TOKEN_EXPIRE_MINUTES: int = 30
@@ -51,6 +51,11 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_ID: str = ""
     GOOGLE_CLIENT_SECRET: str = ""
     GOOGLE_REDIRECT_URI: str = "http://localhost:8000/api/v1/auth/google/callback"
+
+    # LinkedIn OAuth Configuration
+    LINKEDIN_CLIENT_ID: str = ""
+    LINKEDIN_CLIENT_SECRET: str = ""
+    LINKEDIN_REDIRECT_URI: str = "http://localhost:8000/api/v1/auth/linkedin/callback"
 
     class Config:
         env_file = ".env"
