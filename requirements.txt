@@ -12,3 +12,5 @@ apscheduler==3.10.4
 aiosmtplib==3.0.0  # Async SMTP client
 email-validator==2.1.0  # Email validation
 requests
+authlib==1.2.1
+httpx==0.25.0

@@ -15,8 +15,8 @@ class EmailVerificationToken(Base):
     is_used = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=get_current_utc, nullable=False)
 
-    # Relationship
-    user = relationship("User", backref="verification_tokens")
+    # Use back_populates to match User model
+    user = relationship("User", back_populates="verification_tokens")
 
     @property
     def is_expired(self) -> bool:

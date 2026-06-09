@@ -30,23 +30,27 @@ class Settings(BaseSettings):
     ADMIN_FIRST_NAME: str = "Super"
     ADMIN_LAST_NAME: str = "Admin"
 
-    # Email Configuration (Support both Gmail and Postmark)
+    # Email Configuration
     DEFAULT_FROM_EMAIL: str = ""
-    EMAIL_HOST: str = "smtp.gmail.com"  # Default
+    EMAIL_HOST: str = "smtp.gmail.com"
     EMAIL_PORT: int = 587
     EMAIL_USE_TLS: bool = True
     EMAIL_HOST_USER: str = ""
     EMAIL_HOST_PASSWORD: str = ""
     POSTMARK_API_TOKEN: Optional[str] = None
-    
-    # Email Provider Type: "smtp" or "postmark"
-    EMAIL_PROVIDER: str = "postmark"  # "smtp" or "postmark"
-    
-    VERIFICATION_TOKEN_EXPIRE_MINUTES: int = 1440  # 24 hours
-    REQUIRE_EMAIL_VERIFICATION: bool = True  # Require verification before login
+    EMAIL_PROVIDER: str = "posmarkapp"
 
     # Reset Token Configuration
     RESET_TOKEN_EXPIRE_MINUTES: int = 30
+
+    # Email Verification Configuration
+    VERIFICATION_TOKEN_EXPIRE_MINUTES: int = 1440
+    REQUIRE_EMAIL_VERIFICATION: bool = True
+
+    # Google OAuth Configuration
+    GOOGLE_CLIENT_ID: str = ""
+    GOOGLE_CLIENT_SECRET: str = ""
+    GOOGLE_REDIRECT_URI: str = "http://localhost:8000/api/v1/auth/google/callback"
 
     class Config:
         env_file = ".env"
