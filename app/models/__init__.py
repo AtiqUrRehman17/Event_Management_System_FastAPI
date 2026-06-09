@@ -4,6 +4,7 @@ from .event import Event
 from .booking import Booking
 from .token_blacklist import TokenBlacklist
 from .password_reset_token import PasswordResetToken
+from .email_verification_token import EmailVerificationToken
 
 __all__ = [
     "User",
@@ -12,4 +13,5 @@ __all__ = [
     "Booking",
     "TokenBlacklist",
     "PasswordResetToken",
+    "EmailVerificationToken",
 ]

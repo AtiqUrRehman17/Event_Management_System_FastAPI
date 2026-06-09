@@ -1,13 +1,9 @@
-from datetime import datetime, timezone
+from datetime import datetime
 from sqlalchemy import Column, Integer, String, DateTime, Boolean, Enum, Text
 from sqlalchemy.orm import relationship
 from app.core.database import Base
 from app.core.enums import UserRole
-
-
-def get_utc_now():
-    """Return current UTC datetime"""
-    return datetime.now(timezone.utc)
+from app.utils.datetime_utils import get_current_utc
 
 
 class User(Base):
@@ -21,16 +17,16 @@ class User(Base):
     last_name = Column(String(50), nullable=False)
     role = Column(Enum(UserRole), default=UserRole.USER, nullable=False)
     is_active = Column(Boolean, default=True)
-    is_verified = Column(Boolean, default=False)  # For email verification
+    is_verified = Column(Boolean, default=False)
     
-    # New profile fields
+    # Profile fields
     phone = Column(String(20), nullable=True)
     bio = Column(Text, nullable=True)
     timezone = Column(String(50), nullable=True, default="UTC")
     profile_picture = Column(String(500), nullable=True)
     
-    created_at = Column(DateTime, default=get_utc_now, nullable=False)
-    updated_at = Column(DateTime, default=get_utc_now, onupdate=get_utc_now, nullable=False)
+    created_at = Column(DateTime, default=get_current_utc, nullable=False)
+    updated_at = Column(DateTime, default=get_current_utc, onupdate=get_current_utc, nullable=False)
 
     # Relationships
     bookings = relationship("Booking", back_populates="user", cascade="all, delete-orphan")
@@ -40,4 +36,4 @@ class User(Base):
         return f"{self.first_name} {self.last_name}"
 
     def __repr__(self) -> str:
-        return f"<User(id={self.id}, username={self.username}, email={self.email}, role={self.role})>"
+        return f"<User(id={self.id}, username={self.username}, email={self.email}, role={self.role}, is_verified={self.is_verified})>"

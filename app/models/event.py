@@ -1,8 +1,9 @@
-from datetime import datetime,timezone
-from sqlalchemy import Column, Integer, String, DateTime, Text, Float, ForeignKey, Enum, Boolean
+from datetime import datetime
+from sqlalchemy import Column, Integer, String, DateTime, Text, Float, ForeignKey, Enum
 from sqlalchemy.orm import relationship
 from app.core.database import Base
 from app.core.enums import EventStatus
+from app.utils.datetime_utils import get_current_utc
 
 
 class Event(Base):
@@ -19,9 +20,9 @@ class Event(Base):
     status = Column(Enum(EventStatus), default=EventStatus.UPCOMING, nullable=False, index=True)
     image_url = Column(String(500), nullable=True)
     category_id = Column(Integer, ForeignKey("categories.id", ondelete="SET NULL"), nullable=True)
-    created_at = Column(DateTime, default=datetime.now(timezone.utc), nullable=False)
-    updated_at = Column(DateTime, default=datetime.now(timezone.utc), onupdate=datetime.now(timezone.utc), nullable=False)
-    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)  # Admin who created/updated
+    created_at = Column(DateTime, default=get_current_utc, nullable=False)
+    updated_at = Column(DateTime, default=get_current_utc, onupdate=get_current_utc, nullable=False)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
     
     # Relationships
     category = relationship("Category", back_populates="events")

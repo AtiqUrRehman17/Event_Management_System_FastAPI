@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 from typing import List, Tuple, Optional
-from datetime import datetime, timezone
+from datetime import datetime
 from app.models.event import Event
 from app.schemas.event import EventCreate, EventUpdate, EventSearchParams
 from app.core.exceptions import (
@@ -12,6 +12,8 @@ from app.core.exceptions import (
 from app.core.enums import EventStatus
 from app.pagination import PaginationParams, paginate_query
 import logging
+from app.utils.datetime_utils import get_current_utc, make_aware
+
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +23,7 @@ def make_aware(dt: datetime) -> datetime:
     if dt is None:
         return None
     if dt.tzinfo is None:
-        return dt.replace(tzinfo=timezone.utc)
+        return dt.replace(tzinfo=get_current_utc())
     return dt
 
 
@@ -60,7 +62,7 @@ class EventService:
             current_status == EventStatus.UPCOMING
             and new_status == EventStatus.COMPLETED
         ):
-            now = datetime.now(timezone.utc)
+            now = get_current_utc()
             event_date_aware = make_aware(event_date)
 
             if event_date_aware > now:
@@ -176,7 +178,7 @@ class EventService:
 
         if event_data.event_date is not None:
             new_date = make_aware(event_data.event_date)
-            if new_date < datetime.now(timezone.utc):
+            if new_date < get_current_utc():
                 raise EventNotAvailableException("Event date cannot be in the past")
             event.event_date = event_data.event_date
 
@@ -211,7 +213,7 @@ class EventService:
         if event_data.image_url is not None:
             event.image_url = event_data.image_url
 
-        event.updated_at = datetime.now(timezone.utc)
+        event.updated_at = get_current_utc()
 
         db.commit()
         db.refresh(event)
@@ -228,16 +230,21 @@ class EventService:
     @staticmethod
     def update_event_status(db: Session) -> int:
         """Auto-update event statuses."""
-        now = datetime.now(timezone.utc)
-
+        now = get_current_utc()
+        
         try:
+            # Find all upcoming events
             upcoming_events = db.query(Event).filter(
                 Event.status == EventStatus.UPCOMING
             ).all()
 
             count = 0
             for event in upcoming_events:
-                event_date = make_aware(event.event_date)
+                # Convert event_date to timezone-naive if needed
+                event_date = event.event_date
+                if hasattr(event_date, 'tzinfo') and event_date.tzinfo is not None:
+                    event_date = event_date.replace(tzinfo=None)
+                
                 if event_date < now:
                     event.status = EventStatus.COMPLETED
                     event.updated_at = now

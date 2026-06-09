@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, status, Query
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from typing import Optional
 from sqlalchemy.orm import Session
@@ -9,10 +9,12 @@ from app.schemas.auth import (
     RegisterRequest, 
     TokenRefresh,
     ForgotPasswordRequest,
-    ResetPasswordRequest
+    ResetPasswordRequest,
+    EmailVerificationRequest,
+    ResendVerificationRequest
 )
 from app.services.auth_service import AuthService
-from app.utils.response import success_response
+from app.utils.response import success_response, error_response
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -24,7 +26,10 @@ async def register(
     user_data: RegisterRequest,
     db: Session = Depends(get_db)
 ):
-    """Register a new user account"""
+    """
+    Register a new user account.
+    A verification email will be sent to the provided email address.
+    """
     user = AuthService.register_user(db, user_data)
 
     return success_response(
@@ -35,11 +40,63 @@ async def register(
                 "email": user.email,
                 "first_name": user.first_name,
                 "last_name": user.last_name,
-                "role": user.role
-            }
+                "role": user.role,
+                "is_verified": user.is_verified
+            },
+            "message": "A verification email has been sent to your email address. Please check your inbox and verify your email before logging in."
         },
-        message="User registered successfully. Please login to get access tokens.",
+        message="User registered successfully. Please check your email for verification link.",
         status_code=status.HTTP_201_CREATED
+    )
+
+
+@router.post("/verify-email", response_model=dict)
+async def verify_email(
+    request: EmailVerificationRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Verify user's email address using verification token.
+    Token is received via email after registration.
+    
+    You can also use query parameter: POST /auth/verify-email?token=your-token
+    """
+    result = AuthService.verify_email(db, request.token)
+    return success_response(
+        data=result,
+        message=result["message"]
+    )
+
+
+@router.get("/verify-email", response_model=dict)
+async def verify_email_get(
+    token: str = Query(..., description="Verification token from email"),
+    db: Session = Depends(get_db)
+):
+    """
+    Alternative GET endpoint for email verification.
+    Clickable link in email: /auth/verify-email?token=your-token
+    """
+    result = AuthService.verify_email(db, token)
+    return success_response(
+        data=result,
+        message=result["message"]
+    )
+
+
+@router.post("/resend-verification", response_model=dict)
+async def resend_verification(
+    request: ResendVerificationRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Resend verification email to user.
+    Provide the email address used during registration.
+    """
+    result = AuthService.resend_verification_email(db, request.email)
+    return success_response(
+        data=result,
+        message=result["message"]
     )
 
 
@@ -48,7 +105,7 @@ async def login(
     login_data: LoginRequest,
     db: Session = Depends(get_db)
 ):
-    """Login using username and password"""
+    """Login using username and password. Email must be verified first."""
     user, access_token, refresh_token = AuthService.login_user(db, login_data)
 
     return success_response(
@@ -59,7 +116,8 @@ async def login(
                 "email": user.email,
                 "first_name": user.first_name,
                 "last_name": user.last_name,
-                "role": user.role
+                "role": user.role,
+                "is_verified": user.is_verified
             },
             "access_token": access_token,
             "refresh_token": refresh_token,
@@ -77,7 +135,6 @@ async def forgot_password(
     """
     Request password reset.
     Sends an email with a reset token to the user's email address.
-    Use the token with POST /auth/reset-password to set new password.
     """
     result = AuthService.forgot_password(db, request)
     return success_response(
@@ -93,7 +150,6 @@ async def reset_password(
 ):
     """
     Reset password using token received via email.
-    Provide the token and your new password.
     """
     result = AuthService.reset_password(db, request)
     return success_response(

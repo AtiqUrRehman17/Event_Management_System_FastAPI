@@ -41,6 +41,9 @@ class Settings(BaseSettings):
     
     # Email Provider Type: "smtp" or "postmark"
     EMAIL_PROVIDER: str = "postmark"  # "smtp" or "postmark"
+    
+    VERIFICATION_TOKEN_EXPIRE_MINUTES: int = 1440  # 24 hours
+    REQUIRE_EMAIL_VERIFICATION: bool = True  # Require verification before login
 
     # Reset Token Configuration
     RESET_TOKEN_EXPIRE_MINUTES: int = 30

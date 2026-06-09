@@ -5,8 +5,8 @@ from app.core.database import Base
 from app.utils.datetime_utils import get_current_utc
 
 
-class PasswordResetToken(Base):
-    __tablename__ = "password_reset_tokens"
+class EmailVerificationToken(Base):
+    __tablename__ = "email_verification_tokens"
 
     id = Column(Integer, primary_key=True, index=True)
     token = Column(String(255), unique=True, nullable=False, index=True)
@@ -16,7 +16,7 @@ class PasswordResetToken(Base):
     created_at = Column(DateTime, default=get_current_utc, nullable=False)
 
     # Relationship
-    user = relationship("User", backref="reset_tokens")
+    user = relationship("User", backref="verification_tokens")
 
     @property
     def is_expired(self) -> bool:
@@ -24,4 +24,4 @@ class PasswordResetToken(Base):
         return get_current_utc() > self.expires_at
 
     def __repr__(self) -> str:
-        return f"<PasswordResetToken(id={self.id}, user_id={self.user_id}, expires_at={self.expires_at})>"
+        return f"<EmailVerificationToken(id={self.id}, user_id={self.user_id}, expires_at={self.expires_at})>"
