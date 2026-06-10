@@ -11,21 +11,22 @@ import logging
 
 from app.core import settings
 from app.core.database import engine, Base, SessionLocal
-from app.core.seed import seed_admin
+from app.core.seed import seed_all
 from app.routers import (
     auth_router,
     users_router,
     categories_router,
     events_router,
-    bookings_router
+    bookings_router,
+    oauth_router,
 )
-from app.routers.oauth import router as oauth_router  # Add this import
 from app.utils import register_error_handlers
 from app.services.event_service import EventService
 from app.services.auth_service import AuthService
 from app.models.email_verification_token import EmailVerificationToken
+from app.models.password_reset_token import PasswordResetToken
+from app.models.token_blacklist import TokenBlacklist
 from datetime import timedelta
-from app.utils.datetime_utils import get_current_utc
 
 logger = logging.getLogger(__name__)
 
@@ -76,11 +77,15 @@ def run_cleanup_verification_tokens():
     """Scheduler job: clean up expired verification tokens every 24 hours"""
     db = SessionLocal()
     try:
+        from app.utils.datetime_utils import get_current_utc
         now = get_current_utc()
+        
+        # Delete expired tokens
         expired = db.query(EmailVerificationToken).filter(
             EmailVerificationToken.expires_at < now
         ).all()
         
+        # Delete used tokens older than 24 hours
         one_day_ago = now - timedelta(hours=24)
         used_old = db.query(EmailVerificationToken).filter(
             EmailVerificationToken.is_used == True,
@@ -104,48 +109,65 @@ def run_cleanup_verification_tokens():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager"""
+    # ---- STARTUP ----
     logger.info("Starting Event Management System...")
 
+    # Step 1: Seed database (admin, categories, sample events)
+    logger.info("Seeding database...")
     db = SessionLocal()
     try:
-        seed_admin(db)
+        seed_all(db)
+    except Exception as e:
+        logger.error(f"Database seeding failed: {str(e)}")
     finally:
         db.close()
 
+    # Step 2: Run initial event status update
     logger.info("Running initial event status update...")
     run_event_status_update()
 
+    # Step 3: Start background scheduler
     scheduler = BackgroundScheduler()
+
     scheduler.add_job(
         run_event_status_update,
         trigger=IntervalTrigger(hours=1),
         id="event_status_update",
+        name="Auto update event statuses",
         replace_existing=True
     )
+
     scheduler.add_job(
         run_cleanup_expired_tokens,
         trigger=IntervalTrigger(hours=24),
         id="cleanup_expired_tokens",
+        name="Clean up expired blacklisted tokens",
         replace_existing=True
     )
+
     scheduler.add_job(
         run_cleanup_reset_tokens,
         trigger=IntervalTrigger(hours=12),
         id="cleanup_reset_tokens",
+        name="Clean up expired reset tokens",
         replace_existing=True
     )
+
     scheduler.add_job(
         run_cleanup_verification_tokens,
         trigger=IntervalTrigger(hours=24),
         id="cleanup_verification_tokens",
+        name="Clean up expired verification tokens",
         replace_existing=True
     )
+
     scheduler.start()
     logger.info("Scheduler started with 4 jobs")
     logger.info("Event Management System is ready!")
 
     yield
 
+    # ---- SHUTDOWN ----
     logger.info("Shutting down scheduler...")
     scheduler.shutdown(wait=False)
     logger.info("Application shutdown complete.")
@@ -168,6 +190,7 @@ app = FastAPI(
 register_error_handlers(app)
 
 
+# Custom OpenAPI schema
 def custom_openapi():
     if app.openapi_schema:
         return app.openapi_schema
@@ -179,6 +202,7 @@ def custom_openapi():
         routes=app.routes,
     )
 
+    # Add security scheme
     openapi_schema["components"] = openapi_schema.get("components", {})
     openapi_schema["components"]["securitySchemes"] = {
         "BearerAuth": {
@@ -195,6 +219,7 @@ def custom_openapi():
 
 app.openapi = custom_openapi
 
+# CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -204,24 +229,27 @@ app.add_middleware(
 )
 
 
-@app.get("/", tags=["Health"])
-async def root():
-    return {
-        "message": f"Welcome to {settings.APP_NAME}",
-        "version": settings.APP_VERSION,
-        "status": "running"
-    }
-
-
+# Health endpoints
 @app.get("/health", tags=["Health"])
 async def health_check():
     return {"status": "healthy"}
 
 
-# Include routers
+@app.get("/", tags=["Health"])
+async def root():
+    return {
+        "message": f"Welcome to {settings.APP_NAME}",
+        "version": settings.APP_VERSION,
+        "status": "running",
+        "docs": "/docs",
+        "redoc": "/redoc"
+    }
+
+
+# Include API routers (all under /api/v1 prefix)
 app.include_router(auth_router, prefix=settings.API_PREFIX)
-app.include_router(oauth_router, prefix=settings.API_PREFIX)  # Add OAuth router
 app.include_router(users_router, prefix=settings.API_PREFIX)
 app.include_router(categories_router, prefix=settings.API_PREFIX)
 app.include_router(events_router, prefix=settings.API_PREFIX)
 app.include_router(bookings_router, prefix=settings.API_PREFIX)
+app.include_router(oauth_router, prefix=settings.API_PREFIX)
