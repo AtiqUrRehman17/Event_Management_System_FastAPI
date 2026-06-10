@@ -69,6 +69,11 @@ class LinkedInAuthRequest(BaseModel):
     redirect_uri: Optional[str] = Field(None, description="Redirect URI used")
 
 
+class FacebookAuthRequest(BaseModel):
+    code: str = Field(..., description="Authorization code from Facebook")
+    redirect_uri: Optional[str] = Field(None, description="Redirect URI used")
+
+
 class Token(BaseModel):
     access_token: str
     refresh_token: str

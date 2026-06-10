@@ -1,5 +1,55 @@
 # Event Management System
 
+A comprehensive **Event Management System** built with **FastAPI**, featuring JWT authentication, OAuth integrations (Google, LinkedIn & Facebook), role-based access control, email verification, password reset, booking management, and more.
+
+---
+
+## Table of Contents
+
+1. [Features](#features)
+2. [Tech Stack](#tech-stack)
+3. [Project Structure](#project-structure)
+4. [Prerequisites](#prerequisites)
+5. [Installation](#installation)
+6. [OAuth Setup Guides](#oauth-setup-guides)
+7. [API Endpoints](#api-endpoints)
+8. [Background Jobs](#background-jobs)
+9. [Security Features](#security-features)
+10. [Error Responses](#error-responses)
+
+---
+
+## Features
+
+### 🔐 Authentication & Authorization
+
+- **JWT Authentication** — Access and refresh tokens with expiry handling
+- **Role-Based Access Control** — Admin and User roles with different permissions
+- **Email Verification** — Verify user emails during registration
+- **Password Reset Flow** — Forgot password with email reset links
+- **Google OAuth Login** — Sign in with Google account
+- **LinkedIn OAuth Login** — Sign in with LinkedIn account
+- **Facebook OAuth Login** — Sign in with Facebook account
+- **Token Blacklist** — Secure logout functionality
+
+### 👤 User Management
+
+- User registration and login
+- Profile update (first name, last name, email, phone, bio, timezone)
+- Password change functionality
+- Account activation/deactivation *(Admin only)*
+- Profile picture support
+
+### 📅 Event Management
+
+- Create, read, update, delete events *(Admin only)*
+- Event fields: title, description, location, date/time, total seats, available seats, price, status, image URL
+- Event statuses: `UPCOMING`, `COMPLETED`, `CANCELLED`
+- Search and filter events (by title, category, location, price range, date range, status)
+- Pagination support for event lists
+
+### 🎟️ Booking System
+
 A comprehensive Event Management System built with FastAPI, featuring JWT authentication, OAuth integrations (Google & LinkedIn), role-based access control, email verification, password reset, booking management, and more.
 
 ## Features
@@ -35,6 +85,19 @@ A comprehensive Event Management System built with FastAPI, featuring JWT authen
 - Admin can view all bookings and cancel any booking
 - Booking summary with total spent
 
+### 🗂️ Category Management
+
+- Create, read, update, delete event categories *(Admin only)*
+- Soft delete categories (`is_active` flag)
+
+### ⚙️ Additional Features
+
+- Pagination for all list endpoints
+- Background scheduler for event status auto-updates
+- Token cleanup jobs (blacklist, reset tokens, verification tokens)
+- Email notifications (verification, password reset, booking confirmations)
+- Standardized API responses
+- Comprehensive error handling
 ### Category Management
 - Create, read, update, delete event categories (Admin only)
 - Soft delete categories (is_active flag)
@@ -48,6 +111,23 @@ A comprehensive Event Management System built with FastAPI, featuring JWT authen
 - Comprehensive error handling
 
 ## Tech Stack
+
+| Technology   | Version  | Purpose                    |
+|--------------|----------|----------------------------|
+| Python       | 3.11+    | Programming language       |
+| FastAPI      | 0.104.1  | Web framework              |
+| SQLAlchemy   | 2.0.23   | ORM for database           |
+| SQLite       | —        | Database (development)     |
+| Pydantic     | 2.5.0    | Data validation            |
+| PyJWT        | 2.8.0    | JWT token handling         |
+| bcrypt       | 4.1.1    | Password hashing           |
+| APScheduler  | 3.10.4   | Background jobs            |
+| Authlib      | 1.2.1    | OAuth integration          |
+| Uvicorn      | 0.24.0   | ASGI server                |
+
+---
+
+## Project Structure
 
 | Technology | Version | Purpose |
 |------------|---------|---------|
