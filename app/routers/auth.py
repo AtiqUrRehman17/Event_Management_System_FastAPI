@@ -21,9 +21,13 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 bearer_scheme = HTTPBearer(auto_error=False)
 
 
-# This is needed for oauth.py to access
+# ==================== Helper Functions ====================
+
 def build_user_info(user: User) -> dict:
-    """Build user info dict to include in JWT token"""
+    """
+    Build user info dict to include in JWT token.
+    This is used by OAuth services to generate tokens.
+    """
     return {
         "username": user.username,
         "email": user.email,
@@ -31,16 +35,21 @@ def build_user_info(user: User) -> dict:
     }
 
 
-# Make it available as a static method reference
+# Attach the helper function to AuthService for use in OAuth modules
 AuthService._build_user_info = staticmethod(build_user_info)
 
+
+# ==================== Registration & Email Verification ====================
 
 @router.post("/register", response_model=dict, status_code=status.HTTP_201_CREATED)
 async def register(
     user_data: RegisterRequest,
     db: Session = Depends(get_db)
 ):
-    """Register a new user account."""
+    """
+    Register a new user account.
+    A verification email will be sent to the provided email address.
+    """
     user = AuthService.register_user(db, user_data)
 
     return success_response(
@@ -54,7 +63,7 @@ async def register(
                 "role": user.role,
                 "is_verified": user.is_verified
             },
-            "message": "A verification email has been sent to your email address."
+            "message": "A verification email has been sent to your email address. Please check your inbox and verify your email before logging in."
         },
         message="User registered successfully. Please check your email for verification link.",
         status_code=status.HTTP_201_CREATED
@@ -66,8 +75,32 @@ async def verify_email(
     request: EmailVerificationRequest,
     db: Session = Depends(get_db)
 ):
-    """Verify user's email address using verification token."""
+    """
+    Verify user's email address using verification token.
+    Token is received via email after registration.
+    
+    Request body:
+    {
+        "token": "your-verification-token"
+    }
+    """
     result = AuthService.verify_email(db, request.token)
+    return success_response(
+        data=result,
+        message=result["message"]
+    )
+
+
+@router.get("/verify-email", response_model=dict)
+async def verify_email_get(
+    token: str = Query(..., description="Verification token from email"),
+    db: Session = Depends(get_db)
+):
+    """
+    Alternative GET endpoint for email verification.
+    Clickable link in email: /auth/verify-email?token=your-token
+    """
+    result = AuthService.verify_email(db, token)
     return success_response(
         data=result,
         message=result["message"]
@@ -79,7 +112,10 @@ async def resend_verification(
     request: ResendVerificationRequest,
     db: Session = Depends(get_db)
 ):
-    """Resend verification email to user."""
+    """
+    Resend verification email to user.
+    Provide the email address used during registration.
+    """
     result = AuthService.resend_verification_email(db, request.email)
     return success_response(
         data=result,
@@ -87,12 +123,17 @@ async def resend_verification(
     )
 
 
+# ==================== Authentication ====================
+
 @router.post("/login", response_model=dict)
 async def login(
     login_data: LoginRequest,
     db: Session = Depends(get_db)
 ):
-    """Login using username and password."""
+    """
+    Login using username and password.
+    Email must be verified first (if REQUIRE_EMAIL_VERIFICATION is enabled).
+    """
     user, access_token, refresh_token = AuthService.login_user(db, login_data)
 
     return success_response(
@@ -104,7 +145,8 @@ async def login(
                 "first_name": user.first_name,
                 "last_name": user.last_name,
                 "role": user.role,
-                "is_verified": user.is_verified
+                "is_verified": user.is_verified,
+                "profile_picture": user.profile_picture
             },
             "access_token": access_token,
             "refresh_token": refresh_token,
@@ -114,38 +156,15 @@ async def login(
     )
 
 
-@router.post("/forgot-password", response_model=dict)
-async def forgot_password(
-    request: ForgotPasswordRequest,
-    db: Session = Depends(get_db)
-):
-    """Request password reset."""
-    result = AuthService.forgot_password(db, request)
-    return success_response(
-        data=result,
-        message="Password reset email processed"
-    )
-
-
-@router.post("/reset-password", response_model=dict)
-async def reset_password(
-    request: ResetPasswordRequest,
-    db: Session = Depends(get_db)
-):
-    """Reset password using token."""
-    result = AuthService.reset_password(db, request)
-    return success_response(
-        data=result,
-        message="Password reset successful"
-    )
-
-
 @router.post("/refresh", response_model=dict)
 async def refresh_token(
     refresh_data: TokenRefresh,
     db: Session = Depends(get_db)
 ):
-    """Refresh access token."""
+    """
+    Refresh access token using refresh token.
+    Old refresh token will be blacklisted (one-time use).
+    """
     access_token, refresh_token = AuthService.refresh_access_token(
         db, refresh_data.refresh_token
     )
@@ -167,7 +186,10 @@ async def logout(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Logout and blacklist tokens."""
+    """
+    Logout and blacklist tokens.
+    Both access token and refresh token will be invalidated.
+    """
     access_token = credentials.credentials if credentials else None
     refresh_token = refresh_data.refresh_token if refresh_data else None
 
@@ -178,3 +200,37 @@ async def logout(
     )
 
     return success_response(data=result, message="Logout successful")
+
+
+# ==================== Password Management ====================
+
+@router.post("/forgot-password", response_model=dict)
+async def forgot_password(
+    request: ForgotPasswordRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Request password reset.
+    Sends an email with a reset token to the user's email address.
+    """
+    result = AuthService.forgot_password(db, request)
+    return success_response(
+        data=result,
+        message="Password reset email processed"
+    )
+
+
+@router.post("/reset-password", response_model=dict)
+async def reset_password(
+    request: ResetPasswordRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Reset password using token received via email.
+    Token is one-time use and expires after configured time.
+    """
+    result = AuthService.reset_password(db, request)
+    return success_response(
+        data=result,
+        message="Password reset successful"
+    )
