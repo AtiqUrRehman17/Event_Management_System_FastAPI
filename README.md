@@ -136,7 +136,6 @@ event-management-system/
 ├── .env                                 # Environment variables
 ├── .gitignore                           # Git ignore file
 ├── requirements.txt                     # Project dependencies
-├── run.py                               # Server startup script
 └── README.md                            # This file
 ```
 
