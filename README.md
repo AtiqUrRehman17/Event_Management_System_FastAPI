@@ -195,7 +195,7 @@ event-management-system/
 │   │   ├── email_service.py             # Email sending service
 │   │   ├── oauth_service.py             # Google OAuth logic
 │   │   └── linkedin_oauth_service.py    # LinkedIn OAuth logic
-│   │   └── facebook_oauth_service.py    # Facebook OAuth logic
+│   │   └── facebook_oauth_service.py    # FaceBook OAuth logic
 │   │
 │   ├── dependencies/                    # FastAPI dependencies
 │   │   ├── __init__.py
