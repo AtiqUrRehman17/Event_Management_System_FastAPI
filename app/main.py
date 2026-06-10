@@ -19,6 +19,7 @@ from app.routers import (
     events_router,
     bookings_router,
     oauth_router,
+    invoice_router,  # NEW: Invoice router
 )
 from app.utils import register_error_handlers
 from app.services.event_service import EventService
@@ -80,12 +81,10 @@ def run_cleanup_verification_tokens():
         from app.utils.datetime_utils import get_current_utc
         now = get_current_utc()
         
-        # Delete expired tokens
         expired = db.query(EmailVerificationToken).filter(
             EmailVerificationToken.expires_at < now
         ).all()
         
-        # Delete used tokens older than 24 hours
         one_day_ago = now - timedelta(hours=24)
         used_old = db.query(EmailVerificationToken).filter(
             EmailVerificationToken.is_used == True,
@@ -253,3 +252,4 @@ app.include_router(categories_router, prefix=settings.API_PREFIX)
 app.include_router(events_router, prefix=settings.API_PREFIX)
 app.include_router(bookings_router, prefix=settings.API_PREFIX)
 app.include_router(oauth_router, prefix=settings.API_PREFIX)
+app.include_router(invoice_router, prefix=settings.API_PREFIX)  # NEW: Invoice router

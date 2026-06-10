@@ -63,7 +63,10 @@ class BookingService:
             event_id=booking_data.event_id,
             number_of_seats=booking_data.number_of_seats,
             total_price=total_price,
-            status=BookingStatus.ACTIVE
+            status=BookingStatus.ACTIVE,
+            payment_status="pending",  # Initialize payment status
+            tax_rate=0.0,
+            tax_amount=0.0
         )
 
         event.available_seats -= booking_data.number_of_seats

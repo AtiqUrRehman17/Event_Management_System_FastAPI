@@ -1,3 +1,4 @@
 .env
 event_management.db
 venv
+__pycache__
