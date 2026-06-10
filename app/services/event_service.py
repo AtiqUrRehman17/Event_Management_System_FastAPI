@@ -11,20 +11,10 @@ from app.core.exceptions import (
 )
 from app.core.enums import EventStatus
 from app.pagination import PaginationParams, paginate_query
+from app.utils.datetime_utils import get_current_utc
 import logging
-from app.utils.datetime_utils import get_current_utc, make_aware
-
 
 logger = logging.getLogger(__name__)
-
-
-def make_aware(dt: datetime) -> datetime:
-    """Convert naive datetime to UTC aware datetime."""
-    if dt is None:
-        return None
-    if dt.tzinfo is None:
-        return dt.replace(tzinfo=get_current_utc())
-    return dt
 
 
 class EventService:
@@ -39,6 +29,31 @@ class EventService:
         ],
         EventStatus.CANCELLED: []
     }
+
+    @staticmethod
+    def _enrich_event_with_category_info(event: Event, db: Session) -> Event:
+        """
+        Add category icon, color, and image to event response.
+        """
+        if event.category_id:
+            from app.services.category_service import CategoryService
+            try:
+                category = CategoryService.get_category_by_id(db, event.category_id)
+                event.category_name = category.name
+                event.category_icon = category.icon
+                event.category_color = category.color
+                event.category_image_url = category.image_url
+            except:
+                event.category_name = None
+                event.category_icon = None
+                event.category_color = None
+                event.category_image_url = None
+        else:
+            event.category_name = None
+            event.category_icon = None
+            event.category_color = None
+            event.category_image_url = None
+        return event
 
     @staticmethod
     def _validate_status_transition(
@@ -63,9 +78,8 @@ class EventService:
             and new_status == EventStatus.COMPLETED
         ):
             now = get_current_utc()
-            event_date_aware = make_aware(event_date)
-
-            if event_date_aware > now:
+            # Compare naive datetimes directly
+            if event_date > now:
                 raise InvalidStatusTransitionException(
                     from_status=current_status.value,
                     to_status=new_status.value
@@ -91,14 +105,19 @@ class EventService:
         db.commit()
         db.refresh(event)
 
+        event = EventService._enrich_event_with_category_info(event, db)
+
         return event
 
     @staticmethod
     def get_event_by_id(db: Session, event_id: int) -> Event:
-        """Get event by ID"""
+        """Get event by ID with category icon and color"""
         event = db.query(Event).filter(Event.id == event_id).first()
         if not event:
             raise EventNotFoundException()
+        
+        event = EventService._enrich_event_with_category_info(event, db)
+        
         return event
 
     @staticmethod
@@ -106,7 +125,7 @@ class EventService:
         db: Session,
         params: EventSearchParams
     ) -> Tuple[List[Event], int]:
-        """Get all events with search/filter/pagination"""
+        """Get all events with search/filter/pagination and category enrichment"""
         query = db.query(Event)
 
         if params.search:
@@ -144,11 +163,15 @@ class EventService:
 
         query = query.order_by(Event.event_date)
 
-        # Use pagination module
-        pagination = PaginationParams(page=params.page, limit=params.limit)
-        events, total = paginate_query(query, pagination)
+        total = query.count()
+        offset = (params.page - 1) * params.limit
+        events = query.offset(offset).limit(params.limit).all()
 
-        return events, total
+        enriched_events = []
+        for event in events:
+            enriched_events.append(EventService._enrich_event_with_category_info(event, db))
+
+        return enriched_events, total
 
     @staticmethod
     def update_event(
@@ -177,8 +200,7 @@ class EventService:
             event.location = event_data.location
 
         if event_data.event_date is not None:
-            new_date = make_aware(event_data.event_date)
-            if new_date < get_current_utc():
+            if event_data.event_date < get_current_utc():
                 raise EventNotAvailableException("Event date cannot be in the past")
             event.event_date = event_data.event_date
 
@@ -214,9 +236,12 @@ class EventService:
             event.image_url = event_data.image_url
 
         event.updated_at = get_current_utc()
+        event.created_by = admin_id
 
         db.commit()
         db.refresh(event)
+
+        event = EventService._enrich_event_with_category_info(event, db)
 
         return event
 
@@ -230,8 +255,9 @@ class EventService:
     @staticmethod
     def update_event_status(db: Session) -> int:
         """Auto-update event statuses."""
+        # Get current UTC time as naive datetime
         now = get_current_utc()
-        
+
         try:
             # Find all upcoming events
             upcoming_events = db.query(Event).filter(
@@ -240,11 +266,10 @@ class EventService:
 
             count = 0
             for event in upcoming_events:
-                # Convert event_date to timezone-naive if needed
+                # event_date is stored as naive datetime in SQLite
                 event_date = event.event_date
-                if hasattr(event_date, 'tzinfo') and event_date.tzinfo is not None:
-                    event_date = event_date.replace(tzinfo=None)
                 
+                # Simple naive comparison (no timezone involved)
                 if event_date < now:
                     event.status = EventStatus.COMPLETED
                     event.updated_at = now
@@ -260,3 +285,42 @@ class EventService:
             db.rollback()
             logger.error(f"Failed to auto-update event statuses: {str(e)}")
             raise
+
+    @staticmethod
+    def get_events_by_category(
+        db: Session,
+        category_id: int,
+        limit: int = 10,
+        upcoming_only: bool = True
+    ) -> List[Event]:
+        """Get events by category ID with optional upcoming filter"""
+        query = db.query(Event).filter(Event.category_id == category_id)
+        
+        if upcoming_only:
+            query = query.filter(Event.status == EventStatus.UPCOMING)
+            query = query.filter(Event.event_date >= get_current_utc())
+        
+        events = query.order_by(Event.event_date).limit(limit).all()
+        
+        enriched_events = []
+        for event in events:
+            enriched_events.append(EventService._enrich_event_with_category_info(event, db))
+        
+        return enriched_events
+
+    @staticmethod
+    def get_upcoming_events_by_category(
+        db: Session,
+        category_id: int,
+        limit: int = 5
+    ) -> List[Event]:
+        """Get upcoming events for a specific category"""
+        return EventService.get_events_by_category(db, category_id, limit, upcoming_only=True)
+
+    @staticmethod
+    def get_category_event_count(db: Session, category_id: int) -> int:
+        """Get total number of events in a category"""
+        return db.query(Event).filter(
+            Event.category_id == category_id,
+            Event.status == EventStatus.UPCOMING
+        ).count()

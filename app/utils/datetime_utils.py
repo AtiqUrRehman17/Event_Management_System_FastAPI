@@ -5,25 +5,23 @@ from typing import Optional
 def get_current_utc() -> datetime:
     """
     Get current UTC datetime as timezone-naive.
-    This is the recommended replacement for deprecated datetime.utcnow()
+    This is the ONLY function that should be used for getting current time.
     """
-    return datetime.now(timezone.utc).replace(tzinfo=None)
+    return datetime.utcnow()
 
 
 def make_naive(dt: datetime) -> datetime:
     """
-    Convert a timezone-aware datetime to timezone-naive.
-    Useful when storing datetime in SQLite.
+    Convert any datetime to timezone-naive.
     """
     if dt.tzinfo is not None:
-        return dt.astimezone(timezone.utc).replace(tzinfo=None)
+        return dt.replace(tzinfo=None)
     return dt
 
 
 def make_aware(dt: datetime, tz: timezone = timezone.utc) -> datetime:
     """
     Convert a timezone-naive datetime to timezone-aware.
-    Useful when reading from SQLite.
     """
     if dt.tzinfo is None:
         return dt.replace(tzinfo=tz)

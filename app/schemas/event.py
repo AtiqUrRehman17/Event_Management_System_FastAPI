@@ -54,7 +54,6 @@ class EventUpdate(BaseModel):
                 raise ValueError('Available seats cannot exceed total seats')
         return v
 
-
 class EventResponse(BaseModel):
     id: int
     title: str
@@ -68,6 +67,9 @@ class EventResponse(BaseModel):
     image_url: Optional[str]
     category_id: Optional[int]
     category_name: Optional[str] = None
+    category_icon: Optional[str] = None
+    category_color: Optional[str] = None
+    category_image_url: Optional[str] = None  # NEW: Category image URL
     created_at: datetime
     updated_at: datetime
     created_by: Optional[int]
