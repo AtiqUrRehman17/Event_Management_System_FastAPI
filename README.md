@@ -63,6 +63,7 @@ A comprehensive Event Management System built with FastAPI, featuring JWT authen
 | Uvicorn | 0.24.0 | ASGI server |
 
 ## Project Structure
+```
 event-management-system/
 ├── app/
 │   ├── __init__.py
@@ -137,7 +138,7 @@ event-management-system/
 ├── requirements.txt                     # Project dependencies
 ├── run.py                               # Server startup script
 └── README.md                            # This file
-
+```
 
 
 ## Prerequisites
