@@ -8,6 +8,8 @@ from .invoice import router as invoice_router
 from .waitlist import router as waitlist_router
 from .notifications import router as notifications_router
 from .admin import router as admin_router
+from .audit import router as audit_router
+from .upload import router as upload_router
 
 __all__ = [
     "auth_router",
@@ -20,4 +22,6 @@ __all__ = [
     "waitlist_router",
     "notifications_router",
     "admin_router",
+    "audit_router",
+    "upload_router",
 ]

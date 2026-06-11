@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query, status, Body,Request
+from fastapi import APIRouter, Depends, Query, status, Body, Request
 from fastapi.responses import StreamingResponse, Response
 from sqlalchemy.orm import Session
 from typing import Optional
@@ -18,9 +18,12 @@ from app.services.waitlist_service import WaitlistService
 from app.utils.response import success_response, paginated_response
 from app.core.enums import BookingStatus, UserRole, EventStatus
 from app.pagination import PaginationParams, get_pagination_params
-from app.core.exceptions import EventNotFoundException
-import requests
+from app.core.exceptions import EventNotFoundException, InsufficientSeatsException
+from app.services.audit_service import AuditService
+from app.models.audit_log import AuditActionType, AuditActionCategory
+import logging
 router = APIRouter(prefix="/bookings", tags=["Bookings"])
+logger = logging.getLogger(__name__)
 
 
 @router.post("/", response_model=dict, status_code=status.HTTP_201_CREATED)
@@ -31,10 +34,11 @@ async def create_booking(
     current_user: User = Depends(get_current_user)
 ):
     """
-    Book an event for current user.
+    Book an event for current user with concurrency-safe seat booking.
     If the event is sold out, you will be offered to join the waitlist.
+    Uses row-level locking to prevent overselling under load.
     """
-    # Check event availability
+    # Quick check before attempting booking (without lock for performance)
     event = db.query(Event).filter(Event.id == booking_data.event_id).first()
     if not event:
         raise EventNotFoundException()
@@ -87,22 +91,36 @@ async def create_booking(
             status_code=status.HTTP_200_OK
         )
     
-    # Check if user has enough seats
-    if event.available_seats < booking_data.number_of_seats:
+    # Attempt booking with retry logic for concurrency safety
+    try:
+        booking = BookingService.create_booking_with_retry(db, current_user.id, booking_data, request)
+    except InsufficientSeatsException as e:
+        # Refresh event to get latest seat count
+        db.refresh(event)
         return success_response(
             data={
                 "event_id": booking_data.event_id,
                 "event_title": event.title,
                 "available_seats": event.available_seats,
                 "requested_seats": booking_data.number_of_seats,
-                "message": f"Only {event.available_seats} seats available."
+                "message": str(e)
             },
             message="Insufficient seats available",
             status_code=status.HTTP_400_BAD_REQUEST
         )
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Booking creation failed: {str(e)}")
+        return success_response(
+            data={
+                "event_id": booking_data.event_id,
+                "event_title": event.title,
+                "message": "Booking failed due to system error. Please try again."
+            },
+            message="Booking failed",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
     
-    # Normal booking flow
-    booking = BookingService.create_booking(db, current_user.id, booking_data, request)
     event = EventService.get_event_by_id(db, booking.event_id)
 
     return success_response(
@@ -411,13 +429,24 @@ async def cancel_booking(
 ):
     """
     Cancel a booking.
-    - Users can cancel their own active bookings
-    - Admins can cancel any booking
+    
+    - Regular users: Can cancel their own active bookings for upcoming events only
+    - Admin users: Can cancel ANY booking (past, cancelled, or active)
     - When a booking is cancelled, the next person on the waitlist will be notified
     """
     is_admin = current_user.role == UserRole.ADMIN
     booking = BookingService.cancel_booking(db, booking_id, current_user.id, is_admin, request)
     event = EventService.get_event_by_id(db, booking.event_id)
+
+    # Build appropriate message based on who cancelled and event status
+    if is_admin:
+        message = f"Booking cancelled by admin. "
+        if event.status != EventStatus.UPCOMING:
+            message += f"Event was {event.status.value}."
+        else:
+            message += "Seats have been released."
+    else:
+        message = "Your booking has been cancelled successfully."
 
     return success_response(
         data={
@@ -427,9 +456,10 @@ async def cancel_booking(
             "number_of_seats": booking.number_of_seats,
             "status": booking.status,
             "cancelled_at": booking.cancelled_at,
-            "message": "Booking cancelled successfully. If there is a waitlist, the next person has been notified."
+            "cancelled_by_admin": is_admin,
+            "message": message
         },
-        message="Booking cancelled successfully"
+        message=message
     )
 
 

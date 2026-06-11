@@ -1,4 +1,171 @@
+# ============================================
+# Environment Variables & Secrets
+# ============================================
 .env
+.env.*
+!.env.example
+
+# ============================================
+# Database Files
+# ============================================
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
 event_management.db
-venv
-__pycache__
+event_management.db-journal
+
+# ============================================
+# Python
+# ============================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+eggs/
+.eggs/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+*.egg
+pip-wheel-metadata/
+share/python-wheels/
+
+# ============================================
+# Virtual Environments
+# ============================================
+venv/
+env/
+ENV/
+.venv/
+.env/
+env.bak/
+venv.bak/
+ENV/
+env.bak/
+venv.bak/
+
+# ============================================
+# OS Generated Files
+# ============================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+*.bak
+*.swp
+*.swo
+*~
+
+# ============================================
+# IDE / Editor Files
+# ============================================
+# PyCharm
+.idea/
+*.iml
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+
+# VS Code
+.vscode/
+*.code-workspace
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim
+*.swp
+*.swo
+*~
+
+# ============================================
+# Uploaded Files
+# ============================================
+uploads/
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.webp
+*.svg
+!uploads/.gitkeep
+
+# ============================================
+# Logs
+# ============================================
+*.log
+logs/
+*.log.*
+pytest.log
+
+# ============================================
+# Testing & Coverage
+# ============================================
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.coverage.*
+coverage.xml
+*.cover
+.hypothesis/
+
+# ============================================
+# Alembic (Python cache only)
+# ============================================
+alembic/__pycache__/
+alembic/versions/__pycache__/
+alembic/*.pyc
+
+# ============================================
+# Temporary Files
+# ============================================
+tmp/
+temp/
+*.tmp
+*.temp
+*.pid
+instance/
+.webassets-cache
+
+# ============================================
+# Backup Files
+# ============================================
+*.backup
+*.old
+*.orig
+
+# ============================================
+# Docker
+# ============================================
+.docker/
+docker-compose.override.yml
+*.tar.gz
+*.tar
+
+# ============================================
+# Report Files
+# ============================================
+*.pdf
+*.csv
+*.xlsx
+!requirements.txt
+
+# ============================================
+# Jupyter Notebook
+# ============================================
+.ipynb_checkpoints/

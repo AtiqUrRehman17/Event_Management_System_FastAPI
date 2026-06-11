@@ -1,9 +1,12 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_, or_
+from sqlalchemy.exc import OperationalError, SQLAlchemyError
 from typing import List, Tuple, Optional, Dict, Any
 from datetime import datetime, timedelta
 import csv
 import io
+import time
+import logging
 from fastapi.responses import StreamingResponse, Response
 from app.models.booking import Booking
 from app.models.event import Event
@@ -24,12 +27,39 @@ from app.utils.datetime_utils import get_current_utc
 from app.services.notification_service import NotificationService
 from app.services.audit_service import AuditService
 from app.models.audit_log import AuditActionType, AuditActionCategory
-import logging
 
 logger = logging.getLogger(__name__)
 
 
 class BookingService:
+
+    @staticmethod
+    def create_booking_with_retry(
+        db: Session,
+        user_id: int,
+        booking_data: BookingCreate,
+        request=None,
+        max_retries: int = 3,
+        retry_delay: float = 0.1
+    ) -> Booking:
+        """
+        Create booking with automatic retry on deadlock.
+        """
+        for attempt in range(max_retries):
+            try:
+                return BookingService.create_booking(db, user_id, booking_data, request)
+            except OperationalError as e:
+                error_msg = str(e).lower()
+                if ("deadlock" in error_msg or "lock" in error_msg) and attempt < max_retries - 1:
+                    logger.warning(f"Database lock detected, retrying booking... (attempt {attempt + 2}/{max_retries})")
+                    db.rollback()
+                    time.sleep(retry_delay * (attempt + 1))  # Exponential backoff
+                    continue
+                raise
+            except SQLAlchemyError as e:
+                db.rollback()
+                logger.error(f"Database error during booking: {str(e)}")
+                raise
 
     @staticmethod
     def create_booking(
@@ -38,11 +68,20 @@ class BookingService:
         booking_data: BookingCreate,
         request=None
     ) -> Booking:
-        """Create a new booking"""
-        event = db.query(Event).filter(Event.id == booking_data.event_id).first()
+        """
+        Create a new booking with row-level locking to prevent overselling.
+        Uses SELECT ... FOR UPDATE to lock the event row during the transaction.
+        """
+        # Use with_for_update() to lock the event row
+        # This prevents concurrent requests from booking the same seat
+        event = db.query(Event).filter(
+            Event.id == booking_data.event_id
+        ).with_for_update().first()  # Row-level lock!
+        
         if not event:
             raise EventNotFoundException()
 
+        # Check if event is upcoming
         if event.status != EventStatus.UPCOMING:
             raise EventNotAvailableException(
                 "Cannot book this event as it is not upcoming"
@@ -57,29 +96,34 @@ class BookingService:
         if event_date < now:
             raise EventNotAvailableException("Cannot book past events")
 
+        # Check seat availability (under lock)
         if event.available_seats < booking_data.number_of_seats:
             raise InsufficientSeatsException(event.available_seats)
 
-        total_price = event.price * booking_data.number_of_seats
+        # Calculate total price with proper decimal precision
+        # Round to 2 decimal places to handle fractional prices correctly
+        total_price = round(event.price * booking_data.number_of_seats, 2)
 
+        # Create booking with float total_price
         booking = Booking(
             user_id=user_id,
             event_id=booking_data.event_id,
             number_of_seats=booking_data.number_of_seats,
-            total_price=total_price,
+            total_price=total_price,  # ✅ Now stores as Float with 2 decimal places
             status=BookingStatus.ACTIVE,
             payment_status="pending",
             tax_rate=0.0,
             tax_amount=0.0
         )
 
+        # Update available seats (under lock)
         event.available_seats -= booking_data.number_of_seats
 
         db.add(booking)
         db.commit()
         db.refresh(booking)
 
-        logger.info(f"Booking created: User {user_id} booked {booking_data.number_of_seats} seat(s) for event {booking_data.event_id}")
+        logger.info(f"Booking created: User {user_id} booked {booking_data.number_of_seats} seat(s) for event {booking_data.event_id}, Total: ${total_price:.2f}")
         
         # Audit log: Booking created
         AuditService.log_action(
@@ -93,7 +137,7 @@ class BookingService:
             new_value={
                 "event_id": booking.event_id,
                 "seats": booking.number_of_seats,
-                "total_price": booking.total_price
+                "total_price": float(total_price)
             }
         )
         
@@ -170,29 +214,45 @@ class BookingService:
         is_admin: bool = False,
         request=None
     ) -> Booking:
-        """Cancel a booking and notify next user in waitlist"""
+        """
+        Cancel a booking.
+        
+        - Regular users: Can only cancel their own ACTIVE bookings for UPCOMING events
+        - Admin users: Can cancel ANY booking (regardless of event status or booking status)
+        """
         booking = BookingService.get_booking_by_id(db, booking_id)
 
+        # Check ownership (unless admin)
         if not is_admin and booking.user_id != user_id:
             raise BookingNotOwnedException()
 
+        # Check if already cancelled
         if booking.status == BookingStatus.CANCELLED:
             raise BookingAlreadyCancelledException()
 
         event = booking.event
         
-        if event.status != EventStatus.UPCOMING:
-            raise EventNotAvailableException(
-                "Cannot cancel booking for completed or cancelled events"
-            )
-
+        # For regular users: Check if event is still upcoming
+        if not is_admin:
+            if event.status != EventStatus.UPCOMING:
+                raise EventNotAvailableException(
+                    "Cannot cancel booking for completed or cancelled events"
+                )
+        
         # Store old status for audit
         old_status = booking.status.value
         
+        # Update booking status
         booking.status = BookingStatus.CANCELLED
         booking.cancelled_at = get_current_utc()
 
-        event.available_seats += booking.number_of_seats
+        # Return seats to event (only if event is still upcoming)
+        # If event is completed/cancelled, seats don't need to be returned
+        if event.status == EventStatus.UPCOMING:
+            event.available_seats += booking.number_of_seats
+            logger.info(f"Returned {booking.number_of_seats} seat(s) to event {event.id}")
+        else:
+            logger.info(f"Booking cancelled for {event.status} event - seats not returned")
 
         db.commit()
         db.refresh(booking)
@@ -211,21 +271,26 @@ class BookingService:
             entity_id=booking_id,
             old_value={"status": old_status},
             new_value={"status": "cancelled"},
-            details={"cancelled_by_admin": is_admin, "original_user_id": booking.user_id if is_admin else None}
+            details={
+                "cancelled_by_admin": is_admin, 
+                "original_user_id": booking.user_id if is_admin else None,
+                "event_status": event.status.value
+            }
         )
         
-        # Send booking cancellation notification
+        # Send booking cancellation notification (only for active bookings)
         try:
             NotificationService.send_booking_cancellation(db, booking.id)
         except Exception as e:
             logger.error(f"Failed to send booking cancellation notification: {str(e)}")
         
-        # Process waitlist for this event
-        from app.services.waitlist_service import WaitlistService
-        try:
-            WaitlistService.process_cancellation(db, event.id)
-        except Exception as e:
-            logger.error(f"Failed to process waitlist after cancellation: {str(e)}")
+        # Process waitlist for this event (only if event is still upcoming)
+        if event.status == EventStatus.UPCOMING:
+            from app.services.waitlist_service import WaitlistService
+            try:
+                WaitlistService.process_cancellation(db, event.id)
+            except Exception as e:
+                logger.error(f"Failed to process waitlist after cancellation: {str(e)}")
 
         return booking
 
@@ -623,7 +688,7 @@ class BookingService:
             headers={"Content-Disposition": f"attachment; filename={filename}"}
         )
     
-    # ==================== NEW: Booking History Methods ====================
+    # ==================== Booking History Methods ====================
     
     @staticmethod
     def get_booking_history(
@@ -778,8 +843,6 @@ class BookingService:
         """
         Get detailed booking statistics for user dashboard.
         """
-        now = get_current_utc()
-        
         # Get all user's bookings
         bookings = db.query(Booking).filter(Booking.user_id == user_id).all()
         

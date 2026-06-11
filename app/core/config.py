@@ -1,5 +1,7 @@
 from pydantic_settings import BaseSettings
 from typing import Optional
+import secrets
+import os
 
 
 class Settings(BaseSettings):
@@ -13,8 +15,8 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "sqlite:///./event_management.db"
     SQLALCHEMY_ECHO: bool = False
 
-    # JWT Configuration
-    SECRET_KEY: str = "mysecretkey"
+    # JWT Configuration - NO DEFAULT VALUE
+    SECRET_KEY: Optional[str] = None
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
@@ -38,7 +40,11 @@ class Settings(BaseSettings):
     EMAIL_HOST_USER: str = ""
     EMAIL_HOST_PASSWORD: str = ""
     POSTMARK_API_TOKEN: Optional[str] = None
-    EMAIL_PROVIDER: str = "postmarkapp"
+    EMAIL_PROVIDER: str = "smtp"
+
+    UPLOAD_DIR: str = "uploads"
+    MAX_IMAGE_SIZE_MB: int = 5
+    ALLOWED_IMAGE_EXTENSIONS: list = [".jpg", ".jpeg", ".png", ".gif", ".webp"]
 
     # Reset Token Configuration
     RESET_TOKEN_EXPIRE_MINUTES: int = 30
@@ -66,6 +72,63 @@ class Settings(BaseSettings):
         env_file = ".env"
         case_sensitive = True
         extra = "ignore"
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self._validate_secret_key()
+
+    def _validate_secret_key(self) -> None:
+        """Validate that SECRET_KEY is properly configured"""
+        
+        # Check if SECRET_KEY is set
+        if not self.SECRET_KEY:
+            if self.DEBUG:
+                # In development, generate a random key and warn
+                self.SECRET_KEY = secrets.token_urlsafe(32)
+                print("=" * 60)
+                print("⚠️  WARNING: SECRET_KEY not set in .env file!")
+                print(f"Generated random key for development: {self.SECRET_KEY}")
+                print("For production, please set a secure SECRET_KEY in your .env file!")
+                print("=" * 60)
+            else:
+                # In production, fail hard
+                raise ValueError(
+                    "\n" + "=" * 60 + "\n"
+                    "❌ SECURITY ERROR: SECRET_KEY is required in production mode!\n"
+                    "Please set a secure SECRET_KEY in your .env file.\n"
+                    "You can generate one using:\n"
+                    "    python -c 'import secrets; print(secrets.token_urlsafe(32))'\n"
+                    + "=" * 60
+                )
+        
+        # Validate key strength for production
+        if not self.DEBUG and len(self.SECRET_KEY) < 32:
+            raise ValueError(
+                f"\n" + "=" * 60 + "\n"
+                f"❌ SECURITY ERROR: SECRET_KEY is too weak ({len(self.SECRET_KEY)} characters).\n"
+                f"Minimum required is 32 characters for HS256.\n"
+                f"Generate a new key using:\n"
+                f"    python -c 'import secrets; print(secrets.token_urlsafe(32))'\n"
+                + "=" * 60
+            )
+        
+        # Check for common weak keys
+        weak_keys = ["mysecretkey", "secret", "password", "changeme", "your-super-secret-key-change-this-in-production"]
+        if self.SECRET_KEY and self.SECRET_KEY.lower() in weak_keys:
+            if self.DEBUG:
+                print("=" * 60)
+                print("⚠️  WARNING: You are using a weak SECRET_KEY!")
+                print("Please generate a strong key for production use.")
+                print("=" * 60)
+            else:
+                raise ValueError(
+                    "\n" + "=" * 60 + "\n"
+                    "❌ SECURITY ERROR: SECRET_KEY is too weak for production!\n"
+                    f"Current key '{self.SECRET_KEY}' is commonly used and insecure.\n"
+                    "Generate a strong random key using:\n"
+                    "    python -c 'import secrets; print(secrets.token_urlsafe(32))'\n"
+                    + "=" * 60
+                )
 
 
 settings = Settings()
