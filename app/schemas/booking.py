@@ -46,7 +46,6 @@ class BookingFilterParams(BaseModel):
     @field_validator('end_date')
     @classmethod
     def validate_dates(cls, v: Optional[datetime], info: ValidationInfo) -> Optional[datetime]:
-        """Validate that end_date is after start_date"""
         if v is not None:
             start_date = info.data.get('start_date')
             if start_date is not None and v < start_date:
@@ -122,3 +121,47 @@ class BookingSummaryResponse(BaseModel):
     past_events_count: int
     average_booking_value: float
     most_active_month: Optional[str] = None
+
+
+# NEW: Booking History Response
+class BookingHistoryItem(BaseModel):
+    """Individual booking history item with enhanced details"""
+    id: int
+    booking_date: datetime
+    event_id: int
+    event_title: str
+    event_date: datetime
+    event_location: str
+    event_image_url: Optional[str] = None
+    category_name: Optional[str] = None
+    category_icon: Optional[str] = None
+    number_of_seats: int
+    total_price: float
+    status: BookingStatus
+    cancelled_at: Optional[datetime] = None
+    days_until_event: Optional[int] = None
+    is_past: bool
+    is_upcoming: bool
+    can_cancel: bool
+    invoice_number: Optional[str] = None
+    payment_status: Optional[str] = None
+
+
+class BookingHistoryResponse(BaseModel):
+    """Dedicated booking history response"""
+    upcoming_bookings: List[BookingHistoryItem]
+    past_bookings: List[BookingHistoryItem]
+    cancelled_bookings: List[BookingHistoryItem]
+    summary: dict
+    pagination: dict
+
+
+class BookingHistoryFilterParams(BaseModel):
+    """Filter parameters for booking history"""
+    type: Optional[str] = Field(None, description="Filter by type: upcoming, past, cancelled")
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
+    min_price: Optional[float] = None
+    max_price: Optional[float] = None
+    event_name: Optional[str] = None
+    category_id: Optional[int] = None

@@ -4,10 +4,12 @@ warnings.filterwarnings("ignore")
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
+from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 import logging
+from pathlib import Path
 
 from app.core import settings
 from app.core.database import engine, Base, SessionLocal
@@ -23,6 +25,8 @@ from app.routers import (
     waitlist_router,
     notifications_router,
     admin_router,
+    audit_router,
+    upload_router,
 )
 from app.utils import register_error_handlers
 from app.services.event_service import EventService
@@ -37,6 +41,13 @@ logger = logging.getLogger(__name__)
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
+
+# Create upload directories if they don't exist
+uploads_dir = Path("uploads")
+uploads_dir.mkdir(exist_ok=True)
+
+for subdir in ["events", "categories", "avatars"]:
+    (uploads_dir / subdir).mkdir(exist_ok=True)
 
 
 def run_event_status_update():
@@ -206,9 +217,14 @@ app = FastAPI(
     docs_url="/docs" if settings.DEBUG else None,
     redoc_url="/redoc" if settings.DEBUG else None,
     swagger_ui_parameters={
-        "persistAuthorization": False,
+        "persistAuthorization": True,  # Tokens persist across page refreshes
+        "displayRequestDuration": True,
+        "filter": True,
     }
 )
+
+# Mount static files for uploads
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 # Register error handlers
 register_error_handlers(app)
@@ -281,3 +297,5 @@ app.include_router(invoice_router, prefix=settings.API_PREFIX)
 app.include_router(waitlist_router, prefix=settings.API_PREFIX)
 app.include_router(notifications_router, prefix=settings.API_PREFIX)
 app.include_router(admin_router, prefix=settings.API_PREFIX)
+app.include_router(audit_router, prefix=settings.API_PREFIX)
+app.include_router(upload_router, prefix=settings.API_PREFIX)

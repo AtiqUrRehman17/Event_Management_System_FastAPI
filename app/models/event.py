@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, DateTime, Text, Float, ForeignKey, Enum
+from sqlalchemy import Column, Integer, String, DateTime, Text, Float, ForeignKey, Enum, Boolean
 from sqlalchemy.orm import relationship
 from app.core.database import Base
 from app.core.enums import EventStatus
@@ -24,10 +24,16 @@ class Event(Base):
     updated_at = Column(DateTime, default=get_current_utc, onupdate=get_current_utc, nullable=False)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
     
+    # Soft delete fields
+    is_deleted = Column(Boolean, default=False, nullable=False, index=True)
+    deleted_at = Column(DateTime, nullable=True)
+    deleted_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    
     # Relationships
     category = relationship("Category", back_populates="events")
     bookings = relationship("Booking", back_populates="event", cascade="all, delete-orphan")
     creator = relationship("User", foreign_keys=[created_by])
+    deleter = relationship("User", foreign_keys=[deleted_by])
     
     def __repr__(self) -> str:
-        return f"<Event(id={self.id}, title={self.title}, status={self.status}, available_seats={self.available_seats})>"
+        return f"<Event(id={self.id}, title={self.title}, status={self.status}, available_seats={self.available_seats}, is_deleted={self.is_deleted})>"

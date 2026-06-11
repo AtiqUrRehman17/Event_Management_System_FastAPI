@@ -33,13 +33,26 @@ class InvoiceService:
     
     @staticmethod
     def calculate_tax(amount: float, tax_rate: float) -> Dict[str, float]:
-        """Calculate tax amount"""
-        tax_amount = amount * (tax_rate / 100)
-        total_amount = amount + tax_amount
+        """
+        Calculate tax amount with proper decimal precision.
+        Rounds all values to 2 decimal places to avoid floating point issues.
+        
+        Args:
+            amount: The subtotal amount (e.g., 75.50)
+            tax_rate: Tax rate percentage (e.g., 10 for 10%)
+        
+        Returns:
+            Dictionary with subtotal, tax_amount, and total_amount
+        """
+        # Ensure amount has proper decimal precision
+        subtotal = round(amount, 2)
+        tax_amount = round(subtotal * (tax_rate / 100), 2)
+        total_amount = round(subtotal + tax_amount, 2)
+        
         return {
-            "subtotal": round(amount, 2),
-            "tax_amount": round(tax_amount, 2),
-            "total_amount": round(total_amount, 2)
+            "subtotal": subtotal,
+            "tax_amount": tax_amount,
+            "total_amount": total_amount
         }
     
     @staticmethod
@@ -63,13 +76,13 @@ class InvoiceService:
         event = booking.event
         user = booking.user
         
-        # Calculate tax
+        # Calculate tax with proper decimal precision
         tax_calculation = InvoiceService.calculate_tax(booking.total_price, tax_rate)
         
         # Generate invoice number if not exists
         if not booking.invoice_number:
             booking.invoice_number = InvoiceService.generate_invoice_number(booking_id)
-            booking.subtotal = booking.total_price
+            booking.subtotal = tax_calculation["subtotal"]
             booking.tax_rate = tax_rate
             booking.tax_amount = tax_calculation["tax_amount"]
             booking.total_amount = tax_calculation["total_amount"]
@@ -81,13 +94,13 @@ class InvoiceService:
             InvoiceItem(
                 description=f"{event.title} - {event.event_date.strftime('%B %d, %Y at %I:%M %p')}",
                 quantity=booking.number_of_seats,
-                unit_price=event.price,
-                total=booking.number_of_seats * event.price
+                unit_price=round(event.price, 2),  # Round unit price to 2 decimals
+                total=round(booking.number_of_seats * event.price, 2)
             )
         ]
         
-        # Add service fee if applicable
-        if tax_rate > 0:
+        # Add tax as a line item if applicable
+        if tax_rate > 0 and tax_calculation["tax_amount"] > 0:
             items.append(
                 InvoiceItem(
                     description=f"Tax ({tax_rate}%)",
@@ -106,7 +119,7 @@ class InvoiceService:
         )
         
         # Generate QR code (optional)
-        qr_code_url = InvoiceService.generate_qr_code(booking.invoice_number, booking.total_amount)
+        qr_code_url = InvoiceService.generate_qr_code(booking.invoice_number, booking.total_amount or tax_calculation["total_amount"])
         
         return InvoiceData(
             invoice_number=booking.invoice_number,
@@ -137,9 +150,10 @@ class InvoiceService:
     
     @staticmethod
     def generate_qr_code(invoice_number: str, amount: float) -> Optional[str]:
-        """Generate QR code as base64 string"""
+        """Generate QR code as base64 string with proper decimal formatting"""
         try:
             import qrcode
+            # Format amount with 2 decimal places
             qr_data = f"Invoice: {invoice_number}\nAmount: ${amount:.2f}"
             qr = qrcode.QRCode(version=1, box_size=10, border=5)
             qr.add_data(qr_data)

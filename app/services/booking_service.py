@@ -1,15 +1,18 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_, or_
+from sqlalchemy.exc import OperationalError, SQLAlchemyError
 from typing import List, Tuple, Optional, Dict, Any
 from datetime import datetime, timedelta
 import csv
 import io
+import time
+import logging
 from fastapi.responses import StreamingResponse, Response
 from app.models.booking import Booking
 from app.models.event import Event
 from app.models.user import User
 from app.models.category import Category
-from app.schemas.booking import BookingCreate, BookingFilterParams, BookingSortField, BookingSortOrder
+from app.schemas.booking import BookingCreate, BookingFilterParams, BookingSortField, BookingSortOrder, BookingHistoryFilterParams
 from app.core.exceptions import (
     EventNotFoundException,
     EventNotAvailableException,
@@ -22,7 +25,8 @@ from app.core.enums import EventStatus, BookingStatus
 from app.pagination import PaginationParams, paginate_query
 from app.utils.datetime_utils import get_current_utc
 from app.services.notification_service import NotificationService
-import logging
+from app.services.audit_service import AuditService
+from app.models.audit_log import AuditActionType, AuditActionCategory
 
 logger = logging.getLogger(__name__)
 
@@ -30,16 +34,54 @@ logger = logging.getLogger(__name__)
 class BookingService:
 
     @staticmethod
+    def create_booking_with_retry(
+        db: Session,
+        user_id: int,
+        booking_data: BookingCreate,
+        request=None,
+        max_retries: int = 3,
+        retry_delay: float = 0.1
+    ) -> Booking:
+        """
+        Create booking with automatic retry on deadlock.
+        """
+        for attempt in range(max_retries):
+            try:
+                return BookingService.create_booking(db, user_id, booking_data, request)
+            except OperationalError as e:
+                error_msg = str(e).lower()
+                if ("deadlock" in error_msg or "lock" in error_msg) and attempt < max_retries - 1:
+                    logger.warning(f"Database lock detected, retrying booking... (attempt {attempt + 2}/{max_retries})")
+                    db.rollback()
+                    time.sleep(retry_delay * (attempt + 1))  # Exponential backoff
+                    continue
+                raise
+            except SQLAlchemyError as e:
+                db.rollback()
+                logger.error(f"Database error during booking: {str(e)}")
+                raise
+
+    @staticmethod
     def create_booking(
         db: Session,
         user_id: int,
-        booking_data: BookingCreate
+        booking_data: BookingCreate,
+        request=None
     ) -> Booking:
-        """Create a new booking"""
-        event = db.query(Event).filter(Event.id == booking_data.event_id).first()
+        """
+        Create a new booking with row-level locking to prevent overselling.
+        Uses SELECT ... FOR UPDATE to lock the event row during the transaction.
+        """
+        # Use with_for_update() to lock the event row
+        # This prevents concurrent requests from booking the same seat
+        event = db.query(Event).filter(
+            Event.id == booking_data.event_id
+        ).with_for_update().first()  # Row-level lock!
+        
         if not event:
             raise EventNotFoundException()
 
+        # Check if event is upcoming
         if event.status != EventStatus.UPCOMING:
             raise EventNotAvailableException(
                 "Cannot book this event as it is not upcoming"
@@ -54,29 +96,50 @@ class BookingService:
         if event_date < now:
             raise EventNotAvailableException("Cannot book past events")
 
+        # Check seat availability (under lock)
         if event.available_seats < booking_data.number_of_seats:
             raise InsufficientSeatsException(event.available_seats)
 
-        total_price = event.price * booking_data.number_of_seats
+        # Calculate total price with proper decimal precision
+        # Round to 2 decimal places to handle fractional prices correctly
+        total_price = round(event.price * booking_data.number_of_seats, 2)
 
+        # Create booking with float total_price
         booking = Booking(
             user_id=user_id,
             event_id=booking_data.event_id,
             number_of_seats=booking_data.number_of_seats,
-            total_price=total_price,
+            total_price=total_price,  # ✅ Now stores as Float with 2 decimal places
             status=BookingStatus.ACTIVE,
             payment_status="pending",
             tax_rate=0.0,
             tax_amount=0.0
         )
 
+        # Update available seats (under lock)
         event.available_seats -= booking_data.number_of_seats
 
         db.add(booking)
         db.commit()
         db.refresh(booking)
 
-        logger.info(f"Booking created: User {user_id} booked {booking_data.number_of_seats} seat(s) for event {booking_data.event_id}")
+        logger.info(f"Booking created: User {user_id} booked {booking_data.number_of_seats} seat(s) for event {booking_data.event_id}, Total: ${total_price:.2f}")
+        
+        # Audit log: Booking created
+        AuditService.log_action(
+            db=db,
+            user_id=user_id,
+            action=AuditActionType.BOOKING_CREATE,
+            category=AuditActionCategory.BOOKING,
+            request=request,
+            entity_type="booking",
+            entity_id=booking.id,
+            new_value={
+                "event_id": booking.event_id,
+                "seats": booking.number_of_seats,
+                "total_price": float(total_price)
+            }
+        )
         
         # Send booking confirmation notification
         try:
@@ -148,46 +211,86 @@ class BookingService:
         db: Session,
         booking_id: int,
         user_id: int,
-        is_admin: bool = False
+        is_admin: bool = False,
+        request=None
     ) -> Booking:
-        """Cancel a booking and notify next user in waitlist"""
+        """
+        Cancel a booking.
+        
+        - Regular users: Can only cancel their own ACTIVE bookings for UPCOMING events
+        - Admin users: Can cancel ANY booking (regardless of event status or booking status)
+        """
         booking = BookingService.get_booking_by_id(db, booking_id)
 
+        # Check ownership (unless admin)
         if not is_admin and booking.user_id != user_id:
             raise BookingNotOwnedException()
 
+        # Check if already cancelled
         if booking.status == BookingStatus.CANCELLED:
             raise BookingAlreadyCancelledException()
 
         event = booking.event
         
-        if event.status != EventStatus.UPCOMING:
-            raise EventNotAvailableException(
-                "Cannot cancel booking for completed or cancelled events"
-            )
-
+        # For regular users: Check if event is still upcoming
+        if not is_admin:
+            if event.status != EventStatus.UPCOMING:
+                raise EventNotAvailableException(
+                    "Cannot cancel booking for completed or cancelled events"
+                )
+        
+        # Store old status for audit
+        old_status = booking.status.value
+        
+        # Update booking status
         booking.status = BookingStatus.CANCELLED
         booking.cancelled_at = get_current_utc()
 
-        event.available_seats += booking.number_of_seats
+        # Return seats to event (only if event is still upcoming)
+        # If event is completed/cancelled, seats don't need to be returned
+        if event.status == EventStatus.UPCOMING:
+            event.available_seats += booking.number_of_seats
+            logger.info(f"Returned {booking.number_of_seats} seat(s) to event {event.id}")
+        else:
+            logger.info(f"Booking cancelled for {event.status} event - seats not returned")
 
         db.commit()
         db.refresh(booking)
 
         logger.info(f"Booking cancelled: Booking {booking_id} by User {user_id} (Admin: {is_admin})")
         
-        # Send booking cancellation notification
+        # Audit log: Booking cancelled
+        action = AuditActionType.BOOKING_ADMIN_CANCEL if is_admin else AuditActionType.BOOKING_CANCEL
+        AuditService.log_action(
+            db=db,
+            user_id=user_id,
+            action=action,
+            category=AuditActionCategory.BOOKING,
+            request=request,
+            entity_type="booking",
+            entity_id=booking_id,
+            old_value={"status": old_status},
+            new_value={"status": "cancelled"},
+            details={
+                "cancelled_by_admin": is_admin, 
+                "original_user_id": booking.user_id if is_admin else None,
+                "event_status": event.status.value
+            }
+        )
+        
+        # Send booking cancellation notification (only for active bookings)
         try:
             NotificationService.send_booking_cancellation(db, booking.id)
         except Exception as e:
             logger.error(f"Failed to send booking cancellation notification: {str(e)}")
         
-        # Process waitlist for this event
-        from app.services.waitlist_service import WaitlistService
-        try:
-            WaitlistService.process_cancellation(db, event.id)
-        except Exception as e:
-            logger.error(f"Failed to process waitlist after cancellation: {str(e)}")
+        # Process waitlist for this event (only if event is still upcoming)
+        if event.status == EventStatus.UPCOMING:
+            from app.services.waitlist_service import WaitlistService
+            try:
+                WaitlistService.process_cancellation(db, event.id)
+            except Exception as e:
+                logger.error(f"Failed to process waitlist after cancellation: {str(e)}")
 
         return booking
 
@@ -344,7 +447,9 @@ class BookingService:
             "days_until_event": days_until,
             "is_upcoming": is_upcoming,
             "can_cancel": can_cancel,
-            "cancellation_deadline": event.event_date - timedelta(days=1) if event.event_date else None
+            "cancellation_deadline": event.event_date - timedelta(days=1) if event.event_date else None,
+            "invoice_number": booking.invoice_number,
+            "payment_status": booking.payment_status
         }
     
     @staticmethod
@@ -446,7 +551,7 @@ class BookingService:
         writer.writerow([
             "Booking ID", "Event Name", "Event Date", "Event Location", 
             "Number of Seats", "Total Price", "Status", "Booking Date", 
-            "Cancelled Date", "Days Until Event"
+            "Cancelled Date", "Days Until Event", "Invoice Number", "Payment Status"
         ])
         
         for booking in bookings:
@@ -460,7 +565,9 @@ class BookingService:
                 booking["status"].value,
                 booking["booking_date"].strftime("%Y-%m-%d %H:%M"),
                 booking["cancelled_at"].strftime("%Y-%m-%d %H:%M") if booking["cancelled_at"] else "",
-                booking["days_until_event"] if booking["days_until_event"] else ""
+                booking["days_until_event"] if booking["days_until_event"] else "",
+                booking["invoice_number"] or "",
+                booking["payment_status"] or ""
             ])
         
         output.seek(0)
@@ -580,3 +687,220 @@ class BookingService:
             media_type="application/pdf",
             headers={"Content-Disposition": f"attachment; filename={filename}"}
         )
+    
+    # ==================== Booking History Methods ====================
+    
+    @staticmethod
+    def get_booking_history(
+        db: Session,
+        user_id: int,
+        filters: BookingHistoryFilterParams = None
+    ) -> Dict[str, Any]:
+        """
+        Get dedicated booking history with upcoming, past, and cancelled bookings.
+        """
+        now = get_current_utc()
+        
+        # Base query for user's bookings
+        base_query = db.query(Booking).filter(Booking.user_id == user_id)
+        
+        # Apply common filters
+        if filters:
+            if filters.start_date:
+                base_query = base_query.filter(Booking.booking_date >= filters.start_date)
+            if filters.end_date:
+                base_query = base_query.filter(Booking.booking_date <= filters.end_date)
+            if filters.min_price:
+                base_query = base_query.filter(Booking.total_price >= filters.min_price)
+            if filters.max_price:
+                base_query = base_query.filter(Booking.total_price <= filters.max_price)
+        
+        # Get all bookings
+        all_bookings = base_query.all()
+        
+        # Categorize bookings
+        upcoming_bookings = []
+        past_bookings = []
+        cancelled_bookings = []
+        
+        for booking in all_bookings:
+            # Get event details
+            event = booking.event
+            if not event:
+                continue
+            
+            event_date = event.event_date
+            if hasattr(event_date, 'tzinfo') and event_date.tzinfo is not None:
+                event_date = event_date.replace(tzinfo=None)
+            
+            days_until = (event_date - now).days
+            is_upcoming = days_until > 0 and booking.status == BookingStatus.ACTIVE
+            is_past = days_until <= 0 and booking.status == BookingStatus.ACTIVE
+            is_cancelled = booking.status == BookingStatus.CANCELLED
+            
+            # Apply event name filter
+            if filters and filters.event_name:
+                if filters.event_name.lower() not in event.title.lower():
+                    continue
+            
+            # Apply category filter
+            if filters and filters.category_id:
+                if event.category_id != filters.category_id:
+                    continue
+            
+            # Apply type filter
+            if filters and filters.type:
+                if filters.type == "upcoming" and not is_upcoming:
+                    continue
+                if filters.type == "past" and not is_past:
+                    continue
+                if filters.type == "cancelled" and not is_cancelled:
+                    continue
+            
+            # Get category info
+            category_name = None
+            category_icon = None
+            if event.category_id:
+                category = db.query(Category).filter(Category.id == event.category_id).first()
+                if category:
+                    category_name = category.name
+                    category_icon = category.icon
+            
+            history_item = {
+                "id": booking.id,
+                "booking_date": booking.booking_date,
+                "event_id": event.id,
+                "event_title": event.title,
+                "event_date": event.event_date,
+                "event_location": event.location,
+                "event_image_url": event.image_url,
+                "category_name": category_name,
+                "category_icon": category_icon,
+                "number_of_seats": booking.number_of_seats,
+                "total_price": booking.total_price,
+                "status": booking.status,
+                "cancelled_at": booking.cancelled_at,
+                "days_until_event": days_until,
+                "is_past": is_past,
+                "is_upcoming": is_upcoming,
+                "can_cancel": is_upcoming and booking.status == BookingStatus.ACTIVE,
+                "invoice_number": booking.invoice_number,
+                "payment_status": booking.payment_status
+            }
+            
+            if is_upcoming:
+                upcoming_bookings.append(history_item)
+            elif is_past:
+                past_bookings.append(history_item)
+            elif is_cancelled:
+                cancelled_bookings.append(history_item)
+        
+        # Sort upcoming by event date (ascending)
+        upcoming_bookings.sort(key=lambda x: x["event_date"])
+        
+        # Sort past by event date (descending)
+        past_bookings.sort(key=lambda x: x["event_date"], reverse=True)
+        
+        # Sort cancelled by cancellation date (descending)
+        cancelled_bookings.sort(key=lambda x: x["cancelled_at"] or x["booking_date"], reverse=True)
+        
+        # Calculate summary
+        total_bookings = len(all_bookings)
+        total_active = len([b for b in all_bookings if b.status == BookingStatus.ACTIVE])
+        total_cancelled = len(cancelled_bookings)
+        total_spent = sum(float(b.total_price) for b in all_bookings if b.status == BookingStatus.ACTIVE)
+        upcoming_count = len(upcoming_bookings)
+        past_count = len(past_bookings)
+        
+        summary = {
+            "total_bookings": total_bookings,
+            "active_bookings": total_active,
+            "cancelled_bookings": total_cancelled,
+            "total_spent": round(total_spent, 2),
+            "upcoming_count": upcoming_count,
+            "past_count": past_count,
+            "average_booking_value": round(total_spent / total_active, 2) if total_active > 0 else 0
+        }
+        
+        # Pagination info
+        pagination = {
+            "total_upcoming": len(upcoming_bookings),
+            "total_past": len(past_bookings),
+            "total_cancelled": len(cancelled_bookings),
+            "items_per_page": 10
+        }
+        
+        return {
+            "upcoming_bookings": upcoming_bookings,
+            "past_bookings": past_bookings,
+            "cancelled_bookings": cancelled_bookings,
+            "summary": summary,
+            "pagination": pagination
+        }
+    
+    @staticmethod
+    def get_booking_statistics(db: Session, user_id: int) -> Dict[str, Any]:
+        """
+        Get detailed booking statistics for user dashboard.
+        """
+        # Get all user's bookings
+        bookings = db.query(Booking).filter(Booking.user_id == user_id).all()
+        
+        # Monthly spending
+        monthly_spending = {}
+        for booking in bookings:
+            if booking.status == BookingStatus.ACTIVE:
+                month_key = booking.booking_date.strftime("%Y-%m")
+                monthly_spending[month_key] = monthly_spending.get(month_key, 0) + float(booking.total_price)
+        
+        # Most popular categories
+        category_counts = {}
+        for booking in bookings:
+            if booking.event and booking.event.category_id:
+                cat_id = booking.event.category_id
+                category_counts[cat_id] = category_counts.get(cat_id, 0) + booking.number_of_seats
+        
+        # Get category names
+        popular_categories = []
+        for cat_id, count in sorted(category_counts.items(), key=lambda x: x[1], reverse=True)[:5]:
+            category = db.query(Category).filter(Category.id == cat_id).first()
+            if category:
+                popular_categories.append({
+                    "id": category.id,
+                    "name": category.name,
+                    "icon": category.icon,
+                    "booking_count": count
+                })
+        
+        # Calculate average days before event that user books
+        booking_lead_times = []
+        for booking in bookings:
+            if booking.event and booking.event.event_date:
+                lead_time = (booking.event.event_date - booking.booking_date).days
+                if lead_time >= 0:
+                    booking_lead_times.append(lead_time)
+        
+        average_lead_time = sum(booking_lead_times) / len(booking_lead_times) if booking_lead_times else 0
+        
+        # Most active months (booking frequency)
+        booking_months = {}
+        for booking in bookings:
+            month_key = booking.booking_date.strftime("%Y-%m")
+            booking_months[month_key] = booking_months.get(month_key, 0) + 1
+        
+        most_active_month = max(booking_months, key=booking_months.get) if booking_months else None
+        
+        return {
+            "total_spent": round(sum(float(b.total_price) for b in bookings if b.status == BookingStatus.ACTIVE), 2),
+            "total_bookings": len(bookings),
+            "active_bookings": len([b for b in bookings if b.status == BookingStatus.ACTIVE]),
+            "cancelled_bookings": len([b for b in bookings if b.status == BookingStatus.CANCELLED]),
+            "average_booking_value": round(sum(float(b.total_price) for b in bookings if b.status == BookingStatus.ACTIVE) / len([b for b in bookings if b.status == BookingStatus.ACTIVE]), 2) if [b for b in bookings if b.status == BookingStatus.ACTIVE] else 0,
+            "average_lead_time_days": round(average_lead_time, 1),
+            "most_active_month": most_active_month,
+            "monthly_spending": [{"month": k, "amount": v} for k, v in sorted(monthly_spending.items())[-6:]],
+            "popular_categories": popular_categories,
+            "booking_timeline": [
+                {"month": k, "count": v} for k, v in sorted(booking_months.items())[-6:]
+            ]
+        }

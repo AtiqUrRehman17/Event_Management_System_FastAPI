@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query, status, Body
+from fastapi import APIRouter, Depends, Query, status, Body, Request
 from fastapi.responses import StreamingResponse, Response
 from sqlalchemy.orm import Session
 from typing import Optional
@@ -9,7 +9,8 @@ from app.models.event import Event
 from app.models.waitlist import Waitlist, WaitlistStatus
 from app.schemas.booking import (
     BookingCreate, BookingFilterParams, BookingSortField, BookingSortOrder,
-    BookingListResponse, BookingDetailResponse, BookingSummaryResponse
+    BookingListResponse, BookingDetailResponse, BookingSummaryResponse,
+    BookingHistoryFilterParams
 )
 from app.services.booking_service import BookingService
 from app.services.event_service import EventService
@@ -17,22 +18,27 @@ from app.services.waitlist_service import WaitlistService
 from app.utils.response import success_response, paginated_response
 from app.core.enums import BookingStatus, UserRole, EventStatus
 from app.pagination import PaginationParams, get_pagination_params
-from app.core.exceptions import EventNotFoundException
-
+from app.core.exceptions import EventNotFoundException, InsufficientSeatsException
+from app.services.audit_service import AuditService
+from app.models.audit_log import AuditActionType, AuditActionCategory
+import logging
 router = APIRouter(prefix="/bookings", tags=["Bookings"])
+logger = logging.getLogger(__name__)
 
 
 @router.post("/", response_model=dict, status_code=status.HTTP_201_CREATED)
 async def create_booking(
     booking_data: BookingCreate,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """
-    Book an event for current user.
+    Book an event for current user with concurrency-safe seat booking.
     If the event is sold out, you will be offered to join the waitlist.
+    Uses row-level locking to prevent overselling under load.
     """
-    # Check event availability
+    # Quick check before attempting booking (without lock for performance)
     event = db.query(Event).filter(Event.id == booking_data.event_id).first()
     if not event:
         raise EventNotFoundException()
@@ -85,22 +91,36 @@ async def create_booking(
             status_code=status.HTTP_200_OK
         )
     
-    # Check if user has enough seats
-    if event.available_seats < booking_data.number_of_seats:
+    # Attempt booking with retry logic for concurrency safety
+    try:
+        booking = BookingService.create_booking_with_retry(db, current_user.id, booking_data, request)
+    except InsufficientSeatsException as e:
+        # Refresh event to get latest seat count
+        db.refresh(event)
         return success_response(
             data={
                 "event_id": booking_data.event_id,
                 "event_title": event.title,
                 "available_seats": event.available_seats,
                 "requested_seats": booking_data.number_of_seats,
-                "message": f"Only {event.available_seats} seats available."
+                "message": str(e)
             },
             message="Insufficient seats available",
             status_code=status.HTTP_400_BAD_REQUEST
         )
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Booking creation failed: {str(e)}")
+        return success_response(
+            data={
+                "event_id": booking_data.event_id,
+                "event_title": event.title,
+                "message": "Booking failed due to system error. Please try again."
+            },
+            message="Booking failed",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
     
-    # Normal booking flow
-    booking = BookingService.create_booking(db, current_user.id, booking_data)
     event = EventService.get_event_by_id(db, booking.event_id)
 
     return success_response(
@@ -203,6 +223,64 @@ async def get_my_bookings(
             }
         },
         message="Bookings retrieved successfully"
+    )
+
+
+@router.get("/history", response_model=dict)
+async def get_booking_history(
+    type: Optional[str] = Query(None, description="Filter by type: upcoming, past, cancelled"),
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    min_price: Optional[float] = None,
+    max_price: Optional[float] = None,
+    event_name: Optional[str] = None,
+    category_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Get dedicated booking history with categorized bookings.
+    Shows upcoming, past, and cancelled bookings separately.
+    
+    Filters available:
+    - type: Filter by booking type (upcoming, past, cancelled)
+    - start_date/end_date: Filter by booking date range
+    - min_price/max_price: Filter by total price range
+    - event_name: Search by event name
+    - category_id: Filter by event category
+    """
+    filters = BookingHistoryFilterParams(
+        type=type,
+        start_date=start_date,
+        end_date=end_date,
+        min_price=min_price,
+        max_price=max_price,
+        event_name=event_name,
+        category_id=category_id
+    )
+    
+    history = BookingService.get_booking_history(db, current_user.id, filters)
+    
+    return success_response(
+        data=history,
+        message="Booking history retrieved successfully"
+    )
+
+
+@router.get("/statistics", response_model=dict)
+async def get_booking_statistics(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Get detailed booking statistics for user.
+    Includes monthly spending, popular categories, and booking patterns.
+    """
+    stats = BookingService.get_booking_statistics(db, current_user.id)
+    
+    return success_response(
+        data=stats,
+        message="Booking statistics retrieved successfully"
     )
 
 
@@ -345,18 +423,30 @@ async def get_booking_detail(
 @router.post("/{booking_id}/cancel", response_model=dict)
 async def cancel_booking(
     booking_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """
     Cancel a booking.
-    - Users can cancel their own active bookings
-    - Admins can cancel any booking
+    
+    - Regular users: Can cancel their own active bookings for upcoming events only
+    - Admin users: Can cancel ANY booking (past, cancelled, or active)
     - When a booking is cancelled, the next person on the waitlist will be notified
     """
     is_admin = current_user.role == UserRole.ADMIN
-    booking = BookingService.cancel_booking(db, booking_id, current_user.id, is_admin)
+    booking = BookingService.cancel_booking(db, booking_id, current_user.id, is_admin, request)
     event = EventService.get_event_by_id(db, booking.event_id)
+
+    # Build appropriate message based on who cancelled and event status
+    if is_admin:
+        message = f"Booking cancelled by admin. "
+        if event.status != EventStatus.UPCOMING:
+            message += f"Event was {event.status.value}."
+        else:
+            message += "Seats have been released."
+    else:
+        message = "Your booking has been cancelled successfully."
 
     return success_response(
         data={
@@ -366,9 +456,10 @@ async def cancel_booking(
             "number_of_seats": booking.number_of_seats,
             "status": booking.status,
             "cancelled_at": booking.cancelled_at,
-            "message": "Booking cancelled successfully. If there is a waitlist, the next person has been notified."
+            "cancelled_by_admin": is_admin,
+            "message": message
         },
-        message="Booking cancelled successfully"
+        message=message
     )
 
 
