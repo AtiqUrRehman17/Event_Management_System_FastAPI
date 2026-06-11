@@ -5,15 +5,19 @@ from typing import Optional
 from datetime import datetime
 from app.dependencies import get_db, get_current_user, get_current_admin
 from app.models.user import User
+from app.models.event import Event
+from app.models.waitlist import Waitlist, WaitlistStatus
 from app.schemas.booking import (
     BookingCreate, BookingFilterParams, BookingSortField, BookingSortOrder,
     BookingListResponse, BookingDetailResponse, BookingSummaryResponse
 )
 from app.services.booking_service import BookingService
 from app.services.event_service import EventService
+from app.services.waitlist_service import WaitlistService
 from app.utils.response import success_response, paginated_response
-from app.core.enums import BookingStatus, UserRole
+from app.core.enums import BookingStatus, UserRole, EventStatus
 from app.pagination import PaginationParams, get_pagination_params
+from app.core.exceptions import EventNotFoundException
 
 router = APIRouter(prefix="/bookings", tags=["Bookings"])
 
@@ -24,7 +28,78 @@ async def create_booking(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Book an event for current user"""
+    """
+    Book an event for current user.
+    If the event is sold out, you will be offered to join the waitlist.
+    """
+    # Check event availability
+    event = db.query(Event).filter(Event.id == booking_data.event_id).first()
+    if not event:
+        raise EventNotFoundException()
+    
+    # Check if event is upcoming
+    if event.status != EventStatus.UPCOMING:
+        return success_response(
+            data={
+                "event_id": booking_data.event_id,
+                "event_title": event.title,
+                "message": "This event is no longer available for booking."
+            },
+            message="Event not available for booking",
+            status_code=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # If event is sold out, offer waitlist
+    if event.available_seats == 0:
+        # Check if user is already on waitlist
+        existing = db.query(Waitlist).filter(
+            Waitlist.user_id == current_user.id,
+            Waitlist.event_id == booking_data.event_id,
+            Waitlist.status.in_([WaitlistStatus.WAITING, WaitlistStatus.NOTIFIED])
+        ).first()
+        
+        if existing:
+            return success_response(
+                data={
+                    "waitlist_id": existing.id,
+                    "position": existing.position,
+                    "event_id": booking_data.event_id,
+                    "event_title": event.title,
+                    "message": "You are already on the waitlist for this event."
+                },
+                message="Already on waitlist",
+                status_code=status.HTTP_200_OK
+            )
+        
+        # Offer to join waitlist
+        return success_response(
+            data={
+                "event_id": booking_data.event_id,
+                "event_title": event.title,
+                "available_seats": 0,
+                "waitlist_enabled": True,
+                "message": "This event is sold out. Would you like to join the waitlist?",
+                "action": "POST /api/v1/waitlist/{event_id}/join"
+            },
+            message="Event sold out - Join waitlist available",
+            status_code=status.HTTP_200_OK
+        )
+    
+    # Check if user has enough seats
+    if event.available_seats < booking_data.number_of_seats:
+        return success_response(
+            data={
+                "event_id": booking_data.event_id,
+                "event_title": event.title,
+                "available_seats": event.available_seats,
+                "requested_seats": booking_data.number_of_seats,
+                "message": f"Only {event.available_seats} seats available."
+            },
+            message="Insufficient seats available",
+            status_code=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # Normal booking flow
     booking = BookingService.create_booking(db, current_user.id, booking_data)
     event = EventService.get_event_by_id(db, booking.event_id)
 
@@ -162,8 +237,8 @@ async def get_my_booking_timeline(
 @router.get("/me/export/csv", response_class=StreamingResponse)
 async def export_my_bookings_csv(
     status: Optional[BookingStatus] = None,
-    start_date: Optional[datetime] = None,
-    end_date: Optional[datetime] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
     min_price: Optional[float] = None,
     max_price: Optional[float] = None,
     event_name: Optional[str] = None,
@@ -174,10 +249,26 @@ async def export_my_bookings_csv(
     Export my bookings to CSV file.
     Applies the same filters as the GET /me endpoint.
     """
+    # Parse date strings to datetime objects
+    start_date_obj = None
+    end_date_obj = None
+    
+    if start_date:
+        try:
+            start_date_obj = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+        except ValueError:
+            pass
+    
+    if end_date:
+        try:
+            end_date_obj = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+        except ValueError:
+            pass
+    
     filters = BookingFilterParams(
         status=status,
-        start_date=start_date,
-        end_date=end_date,
+        start_date=start_date_obj,
+        end_date=end_date_obj,
         min_price=min_price,
         max_price=max_price,
         event_name=event_name
@@ -189,8 +280,8 @@ async def export_my_bookings_csv(
 @router.get("/me/export/pdf", response_class=Response)
 async def export_my_bookings_pdf(
     status: Optional[BookingStatus] = None,
-    start_date: Optional[datetime] = None,
-    end_date: Optional[datetime] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
     min_price: Optional[float] = None,
     max_price: Optional[float] = None,
     event_name: Optional[str] = None,
@@ -201,10 +292,26 @@ async def export_my_bookings_pdf(
     Export my bookings to PDF file.
     Applies the same filters as the GET /me endpoint.
     """
+    # Parse date strings to datetime objects
+    start_date_obj = None
+    end_date_obj = None
+    
+    if start_date:
+        try:
+            start_date_obj = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+        except ValueError:
+            pass
+    
+    if end_date:
+        try:
+            end_date_obj = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+        except ValueError:
+            pass
+    
     filters = BookingFilterParams(
         status=status,
-        start_date=start_date,
-        end_date=end_date,
+        start_date=start_date_obj,
+        end_date=end_date_obj,
         min_price=min_price,
         max_price=max_price,
         event_name=event_name
@@ -241,7 +348,12 @@ async def cancel_booking(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Cancel a booking (Users cancel own, Admin cancels any)"""
+    """
+    Cancel a booking.
+    - Users can cancel their own active bookings
+    - Admins can cancel any booking
+    - When a booking is cancelled, the next person on the waitlist will be notified
+    """
     is_admin = current_user.role == UserRole.ADMIN
     booking = BookingService.cancel_booking(db, booking_id, current_user.id, is_admin)
     event = EventService.get_event_by_id(db, booking.event_id)
@@ -253,13 +365,13 @@ async def cancel_booking(
             "event_title": event.title,
             "number_of_seats": booking.number_of_seats,
             "status": booking.status,
-            "cancelled_at": booking.cancelled_at
+            "cancelled_at": booking.cancelled_at,
+            "message": "Booking cancelled successfully. If there is a waitlist, the next person has been notified."
         },
         message="Booking cancelled successfully"
     )
 
 
-# Admin endpoints
 @router.get("/", response_model=dict)
 async def get_all_bookings(
     pagination: PaginationParams = Depends(get_pagination_params),
@@ -276,6 +388,8 @@ async def get_all_bookings(
         booking_data.append({
             "id": booking.id,
             "user_id": booking.user_id,
+            "user_name": f"{booking.user.first_name} {booking.user.last_name}",
+            "user_email": booking.user.email,
             "event_id": booking.event_id,
             "event_title": event.title,
             "event_date": event.event_date,
@@ -285,7 +399,9 @@ async def get_all_bookings(
             "booking_date": booking.booking_date,
             "cancelled_at": booking.cancelled_at,
             "created_at": booking.created_at,
-            "updated_at": booking.updated_at
+            "updated_at": booking.updated_at,
+            "payment_status": booking.payment_status,
+            "invoice_number": booking.invoice_number
         })
 
     return paginated_response(
@@ -311,6 +427,8 @@ async def get_event_bookings(
         {
             "id": booking.id,
             "user_id": booking.user_id,
+            "user_name": f"{booking.user.first_name} {booking.user.last_name}",
+            "user_email": booking.user.email,
             "number_of_seats": booking.number_of_seats,
             "total_price": booking.total_price,
             "booking_date": booking.booking_date
@@ -324,6 +442,7 @@ async def get_event_bookings(
             "event_title": event.title,
             "total_bookings": len(booking_data),
             "total_seats_booked": sum(b["number_of_seats"] for b in booking_data),
+            "total_revenue": sum(b["total_price"] for b in booking_data),
             "bookings": booking_data
         },
         message="Event bookings retrieved successfully"

@@ -19,10 +19,13 @@ from app.routers import (
     events_router,
     bookings_router,
     oauth_router,
+    invoice_router,
+    waitlist_router,
 )
 from app.utils import register_error_handlers
 from app.services.event_service import EventService
 from app.services.auth_service import AuthService
+from app.services.waitlist_service import WaitlistService
 from app.models.email_verification_token import EmailVerificationToken
 from app.models.password_reset_token import PasswordResetToken
 from app.models.token_blacklist import TokenBlacklist
@@ -80,12 +83,10 @@ def run_cleanup_verification_tokens():
         from app.utils.datetime_utils import get_current_utc
         now = get_current_utc()
         
-        # Delete expired tokens
         expired = db.query(EmailVerificationToken).filter(
             EmailVerificationToken.expires_at < now
         ).all()
         
-        # Delete used tokens older than 24 hours
         one_day_ago = now - timedelta(hours=24)
         used_old = db.query(EmailVerificationToken).filter(
             EmailVerificationToken.is_used == True,
@@ -102,6 +103,19 @@ def run_cleanup_verification_tokens():
             logger.info(f"Scheduler: Cleaned up {total} expired/used verification token(s)")
     except Exception as e:
         logger.error(f"Scheduler: Verification token cleanup failed - {str(e)}")
+    finally:
+        db.close()
+
+
+def run_cleanup_expired_waitlist():
+    """Scheduler job: clean up expired waitlist notifications every hour"""
+    db = SessionLocal()
+    try:
+        count = WaitlistService.cleanup_expired_notifications(db)
+        if count > 0:
+            logger.info(f"Scheduler: Cleaned up {count} expired waitlist notifications")
+    except Exception as e:
+        logger.error(f"Scheduler: Waitlist cleanup failed - {str(e)}")
     finally:
         db.close()
 
@@ -161,8 +175,16 @@ async def lifespan(app: FastAPI):
         replace_existing=True
     )
 
+    scheduler.add_job(
+        run_cleanup_expired_waitlist,
+        trigger=IntervalTrigger(hours=1),
+        id="cleanup_expired_waitlist",
+        name="Clean up expired waitlist notifications",
+        replace_existing=True
+    )
+
     scheduler.start()
-    logger.info("Scheduler started with 4 jobs")
+    logger.info("Scheduler started with 5 jobs")
     logger.info("Event Management System is ready!")
 
     yield
@@ -253,3 +275,5 @@ app.include_router(categories_router, prefix=settings.API_PREFIX)
 app.include_router(events_router, prefix=settings.API_PREFIX)
 app.include_router(bookings_router, prefix=settings.API_PREFIX)
 app.include_router(oauth_router, prefix=settings.API_PREFIX)
+app.include_router(invoice_router, prefix=settings.API_PREFIX)
+app.include_router(waitlist_router, prefix=settings.API_PREFIX)

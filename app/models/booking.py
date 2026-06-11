@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import Column, Integer, DateTime, ForeignKey, Enum
+from sqlalchemy import Column, Integer, DateTime, ForeignKey, Enum, String, Float
 from sqlalchemy.orm import relationship
 from app.core.database import Base
 from app.core.enums import BookingStatus
@@ -13,12 +13,26 @@ class Booking(Base):
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     event_id = Column(Integer, ForeignKey("events.id", ondelete="CASCADE"), nullable=False)
     number_of_seats = Column(Integer, nullable=False)
-    total_price = Column(Integer, nullable=False)
+    total_price = Column(Float, nullable=False)
     status = Column(Enum(BookingStatus), default=BookingStatus.ACTIVE, nullable=False, index=True)
     booking_date = Column(DateTime, default=get_current_utc, nullable=False)
     cancelled_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=get_current_utc, nullable=False)
     updated_at = Column(DateTime, default=get_current_utc, onupdate=get_current_utc, nullable=False)
+    
+    # Invoice fields
+    invoice_number = Column(String(50), unique=True, nullable=True, index=True)
+    invoice_generated_at = Column(DateTime, nullable=True)
+    payment_status = Column(String(20), default="pending")  # pending, paid, failed, refunded
+    payment_method = Column(String(50), nullable=True)
+    payment_transaction_id = Column(String(255), nullable=True)
+    paid_at = Column(DateTime, nullable=True)
+    
+    # Tax fields
+    subtotal = Column(Float, nullable=True)
+    tax_rate = Column(Float, default=0.0)
+    tax_amount = Column(Float, default=0.0)
+    total_amount = Column(Float, nullable=True)
     
     # Relationships
     user = relationship("User", back_populates="bookings")

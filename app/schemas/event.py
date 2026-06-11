@@ -17,13 +17,23 @@ class EventBase(BaseModel):
 
 class EventCreate(EventBase):
     @field_validator('event_date')
-    def validate_event_date(cls, v):
-        if v < datetime.now(timezone.utc):
+    @classmethod
+    def validate_event_date(cls, v: datetime) -> datetime:
+        """Validate that event date is not in the past"""
+        # Get current UTC time as naive datetime for comparison
+        now = datetime.utcnow()
+        
+        # Convert input to naive if it has timezone
+        if v.tzinfo is not None:
+            v = v.replace(tzinfo=None)
+        
+        if v < now:
             raise ValueError('Event date cannot be in the past')
         return v
     
     @field_validator('total_seats')
-    def validate_seats(cls, v):
+    @classmethod
+    def validate_seats(cls, v: int) -> int:
         if v <= 0:
             raise ValueError('Total seats must be greater than 0')
         return v
@@ -42,17 +52,16 @@ class EventUpdate(BaseModel):
     image_url: Optional[str] = Field(None, max_length=500)
     
     @field_validator('event_date')
-    def validate_event_date(cls, v):
-        if v and v < datetime.now(timezone.utc):
-            raise ValueError('Event date cannot be in the past')
+    @classmethod
+    def validate_event_date(cls, v: Optional[datetime]) -> Optional[datetime]:
+        if v is not None:
+            now = datetime.utcnow()
+            if v.tzinfo is not None:
+                v = v.replace(tzinfo=None)
+            if v < now:
+                raise ValueError('Event date cannot be in the past')
         return v
-    
-    @field_validator('available_seats')
-    def validate_available_seats(cls, v, values):
-        if v is not None and 'total_seats' in values and values['total_seats'] is not None:
-            if v > values['total_seats']:
-                raise ValueError('Available seats cannot exceed total seats')
-        return v
+
 
 class EventResponse(BaseModel):
     id: int
@@ -69,7 +78,7 @@ class EventResponse(BaseModel):
     category_name: Optional[str] = None
     category_icon: Optional[str] = None
     category_color: Optional[str] = None
-    category_image_url: Optional[str] = None  # NEW: Category image URL
+    category_image_url: Optional[str] = None
     created_at: datetime
     updated_at: datetime
     created_by: Optional[int]
@@ -98,8 +107,14 @@ class EventSearchParams(BaseModel):
     limit: int = Field(10, ge=1, le=100)
     
     @field_validator('end_date')
-    def validate_dates(cls, v, values):
-        if v and 'start_date' in values and values['start_date']:
-            if v < values['start_date']:
-                raise ValueError('End date must be after start date')
+    @classmethod
+    def validate_dates(cls, v: Optional[datetime], info) -> Optional[datetime]:
+        if v is not None:
+            start_date = info.data.get('start_date')
+            if start_date is not None:
+                # Convert to naive for comparison
+                v_naive = v.replace(tzinfo=None) if v.tzinfo is not None else v
+                start_naive = start_date.replace(tzinfo=None) if start_date.tzinfo is not None else start_date
+                if v_naive < start_naive:
+                    raise ValueError('End date must be after start date')
         return v

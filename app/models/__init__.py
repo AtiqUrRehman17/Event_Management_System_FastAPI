@@ -5,6 +5,7 @@ from .booking import Booking
 from .token_blacklist import TokenBlacklist
 from .password_reset_token import PasswordResetToken
 from .email_verification_token import EmailVerificationToken
+from .waitlist import Waitlist, WaitlistStatus
 
 __all__ = [
     "User",
@@ -14,4 +15,6 @@ __all__ = [
     "TokenBlacklist",
     "PasswordResetToken",
     "EmailVerificationToken",
+    "Waitlist",
+    "WaitlistStatus",
 ]

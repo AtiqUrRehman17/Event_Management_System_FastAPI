@@ -5,7 +5,7 @@ from email.mime.multipart import MIMEMultipart
 from typing import Optional
 import logging
 from app.core.config import settings
-
+from datetime import datetime
 logger = logging.getLogger(__name__)
 
 
@@ -112,11 +112,11 @@ class EmailService:
             logger.error(f"Failed to send email via Postmark to {to_email}: {str(e)}")
             return False
 
+    # ==================== VERIFICATION EMAILS ====================
+
     @staticmethod
     def send_verification_email(to_email: str, username: str, verification_token: str) -> bool:
-        """
-        Send email verification link to user with the token
-        """
+        """Send email verification link to user"""
         api_verify_endpoint = "/api/v1/auth/verify-email"
 
         html_content = f"""
@@ -152,12 +152,10 @@ class EmailService:
                     padding: 15px;
                     border-radius: 5px;
                     font-family: monospace;
-                    font-size: 18px;
-                    font-weight: bold;
+                    font-size: 16px;
                     word-break: break-all;
                     margin: 20px 0;
                     border-left: 4px solid #2196F3;
-                    text-align: center;
                 }}
                 .footer {{
                     margin-top: 20px;
@@ -170,12 +168,6 @@ class EmailService:
                     font-size: 14px;
                     margin-top: 20px;
                 }}
-                .instruction {{
-                    background-color: #e8f4fd;
-                    padding: 15px;
-                    border-radius: 5px;
-                    margin: 20px 0;
-                }}
             </style>
         </head>
         <body>
@@ -185,18 +177,18 @@ class EmailService:
             <div class="content">
                 <p>Hello <strong>{username}</strong>,</p>
                 <p>Thank you for registering with Event Management System. Please verify your email address to activate your account.</p>
-                
-                <div class="instruction">
-                    <h3>Your Verification Token:</h3>
-                    <div class="token-box">
-                        {verification_token}
-                    </div>
-                    <p>To verify your email, make a POST request to:</p>
-                    <code>POST {api_verify_endpoint}</code>
-                    <p>With JSON body:</p>
-                    <code>{{"token": "{verification_token}"}}</code>
+                <p>Use the token below to verify your email:</p>
+                <div class="token-box">
+                    <strong>Verification Token:</strong> {verification_token}
                 </div>
-                
+                <p>To verify your email, make a POST request to:</p>
+                <div class="token-box">
+                    <strong>API Endpoint:</strong> {api_verify_endpoint}<br>
+                    <strong>Request Body:</strong><br>
+                    {{<br>
+                    &nbsp;&nbsp;"token": "{verification_token}"<br>
+                    }}
+                </div>
                 <p class="warning"><strong>⚠️ This verification token will expire in {settings.VERIFICATION_TOKEN_EXPIRE_MINUTES} minutes ({int(settings.VERIFICATION_TOKEN_EXPIRE_MINUTES / 60)} hours).</strong></p>
                 <p>If you didn't create an account with us, please ignore this email.</p>
                 <hr>
@@ -216,15 +208,13 @@ class EmailService:
 
         Thank you for registering. Please verify your email address to activate your account.
 
-        Your Verification Token: {verification_token}
+        Use the token below to verify your email:
+
+        Verification Token: {verification_token}
 
         To verify your email, make a POST request to:
         API Endpoint: {api_verify_endpoint}
-        
-        Request Body:
-        {{
-            "token": "{verification_token}"
-        }}
+        Request Body: {{"token": "{verification_token}"}}
 
         This verification token will expire in {settings.VERIFICATION_TOKEN_EXPIRE_MINUTES} minutes ({int(settings.VERIFICATION_TOKEN_EXPIRE_MINUTES / 60)} hours).
 
@@ -323,6 +313,8 @@ class EmailService:
             text_content=text_content
         )
 
+    # ==================== PASSWORD RESET EMAILS ====================
+
     @staticmethod
     def send_password_reset_email(to_email: str, username: str, reset_token: str) -> bool:
         """Send password reset email with reset token"""
@@ -361,12 +353,10 @@ class EmailService:
                     padding: 15px;
                     border-radius: 5px;
                     font-family: monospace;
-                    font-size: 18px;
-                    font-weight: bold;
+                    font-size: 16px;
                     word-break: break-all;
                     margin: 20px 0;
                     border-left: 4px solid #4CAF50;
-                    text-align: center;
                 }}
                 .footer {{
                     margin-top: 20px;
@@ -389,7 +379,7 @@ class EmailService:
                 <p>Hello <strong>{username}</strong>,</p>
                 <p>We received a request to reset your password.</p>
                 <div class="token-box">
-                    {reset_token}
+                    <strong>Reset Token:</strong> {reset_token}
                 </div>
                 <p>To reset your password, make a POST request to:</p>
                 <code>POST {api_reset_endpoint}</code>
@@ -512,6 +502,294 @@ class EmailService:
         return EmailService.send_email(
             to_email=to_email,
             subject="Password Changed Successfully - Event Management System",
+            html_content=html_content,
+            text_content=text_content
+        )
+
+    # ==================== WAITLIST EMAILS ====================
+
+    @staticmethod
+    def send_waitlist_joined_email(to_email: str, username: str, event_title: str, position: int) -> bool:
+        """Send confirmation email when user joins waitlist"""
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <style>
+                body {{
+                    font-family: Arial, sans-serif;
+                    line-height: 1.6;
+                    color: #333;
+                    max-width: 600px;
+                    margin: 0 auto;
+                    padding: 20px;
+                }}
+                .header {{
+                    background: #f39c12;
+                    color: white;
+                    padding: 20px;
+                    text-align: center;
+                    border-radius: 5px 5px 0 0;
+                }}
+                .content {{
+                    padding: 30px;
+                    background: #f9f9f9;
+                    border: 1px solid #ddd;
+                    border-top: none;
+                    border-radius: 0 0 5px 5px;
+                }}
+                .position {{
+                    font-size: 24px;
+                    font-weight: bold;
+                    color: #f39c12;
+                }}
+                .footer {{
+                    margin-top: 20px;
+                    font-size: 12px;
+                    color: #777;
+                    text-align: center;
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h2>Waitlist Confirmation</h2>
+                </div>
+                <div class="content">
+                    <p>Hello <strong>{username}</strong>,</p>
+                    <p>You have been added to the waitlist for:</p>
+                    <h3>{event_title}</h3>
+                    <p>Your current position in line is: <span class="position">#{position}</span></p>
+                    <p>You will receive an email notification when a spot becomes available. You will have 48 hours to confirm your spot.</p>
+                    <p>Thank you for your patience!</p>
+                </div>
+                <div class="footer">
+                    <p>Event Management System &copy; 2024 | Waitlist</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+
+        text_content = f"""
+        Waitlist Confirmation
+        
+        Hello {username},
+        
+        You have been added to the waitlist for: {event_title}
+        
+        Your current position in line is: #{position}
+        
+        You will receive an email notification when a spot becomes available. You will have 48 hours to confirm your spot.
+        
+        Thank you for your patience!
+        """
+
+        return EmailService.send_email(
+            to_email=to_email,
+            subject=f"Waitlist Confirmation - {event_title}",
+            html_content=html_content,
+            text_content=text_content
+        )
+
+    @staticmethod
+    def send_waitlist_notification_email(
+        to_email: str, 
+        username: str, 
+        event_title: str, 
+        event_id: int, 
+        expires_at: datetime
+    ) -> bool:
+        """Send notification when a spot becomes available"""
+        expires_str = expires_at.strftime("%B %d, %Y at %I:%M %p")
+        confirm_url = f"/api/v1/waitlist/{event_id}/confirm"
+        
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <style>
+                body {{
+                    font-family: Arial, sans-serif;
+                    line-height: 1.6;
+                    color: #333;
+                    max-width: 600px;
+                    margin: 0 auto;
+                    padding: 20px;
+                }}
+                .header {{
+                    background: #2ecc71;
+                    color: white;
+                    padding: 20px;
+                    text-align: center;
+                    border-radius: 5px 5px 0 0;
+                }}
+                .content {{
+                    padding: 30px;
+                    background: #f9f9f9;
+                    border: 1px solid #ddd;
+                    border-top: none;
+                    border-radius: 0 0 5px 5px;
+                }}
+                .button {{
+                    display: inline-block;
+                    padding: 12px 24px;
+                    background: #3498db;
+                    color: white;
+                    text-decoration: none;
+                    border-radius: 5px;
+                    margin: 20px 0;
+                }}
+                .warning {{
+                    color: #e74c3c;
+                }}
+                .footer {{
+                    margin-top: 20px;
+                    font-size: 12px;
+                    color: #777;
+                    text-align: center;
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h2>A Spot Has Opened Up! 🎉</h2>
+                </div>
+                <div class="content">
+                    <p>Hello <strong>{username}</strong>,</p>
+                    <p>Good news! A spot has become available for:</p>
+                    <h3>{event_title}</h3>
+                    <p>You have been selected from the waitlist to claim this spot.</p>
+                    <p><strong>You must confirm your interest within 48 hours.</strong></p>
+                    <p>Expires: <strong>{expires_str}</strong></p>
+                    <div style="text-align: center;">
+                        <a href="{confirm_url}" class="button">Confirm My Spot</a>
+                    </div>
+                    <p class="warning">If you don't confirm within 48 hours, this spot will be offered to the next person in line.</p>
+                    <p>To claim your spot, click the button above or visit your dashboard.</p>
+                </div>
+                <div class="footer">
+                    <p>Event Management System &copy; 2024 | Waitlist Notification</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+
+        text_content = f"""
+        A Spot Has Opened Up!
+        
+        Hello {username},
+        
+        Good news! A spot has become available for: {event_title}
+        
+        You have been selected from the waitlist to claim this spot.
+        
+        You must confirm your interest within 48 hours.
+        
+        Expires: {expires_str}
+        
+        To confirm your spot, visit: {confirm_url}
+        
+        If you don't confirm within 48 hours, this spot will be offered to the next person in line.
+        """
+
+        return EmailService.send_email(
+            to_email=to_email,
+            subject=f"Spot Available! - {event_title}",
+            html_content=html_content,
+            text_content=text_content
+        )
+
+    # ==================== BOOKING CONFIRMATION EMAILS ====================
+
+    @staticmethod
+    def send_booking_confirmation_email(to_email: str, username: str, event_title: str, booking_id: int, seats: int, total_price: float) -> bool:
+        """Send booking confirmation email"""
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <style>
+                body {{
+                    font-family: Arial, sans-serif;
+                    line-height: 1.6;
+                    color: #333;
+                    max-width: 600px;
+                    margin: 0 auto;
+                    padding: 20px;
+                }}
+                .header {{
+                    background: #3498db;
+                    color: white;
+                    padding: 20px;
+                    text-align: center;
+                    border-radius: 5px 5px 0 0;
+                }}
+                .content {{
+                    padding: 30px;
+                    background: #f9f9f9;
+                    border: 1px solid #ddd;
+                    border-top: none;
+                    border-radius: 0 0 5px 5px;
+                }}
+                .details {{
+                    background: white;
+                    padding: 15px;
+                    border-radius: 5px;
+                    margin: 15px 0;
+                }}
+                .footer {{
+                    margin-top: 20px;
+                    font-size: 12px;
+                    color: #777;
+                    text-align: center;
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h2>Booking Confirmation!</h2>
+                </div>
+                <div class="content">
+                    <p>Hello <strong>{username}</strong>,</p>
+                    <p>Your booking has been confirmed for:</p>
+                    <h3>{event_title}</h3>
+                    <div class="details">
+                        <p><strong>Booking ID:</strong> #{booking_id}</p>
+                        <p><strong>Number of Seats:</strong> {seats}</p>
+                        <p><strong>Total Paid:</strong> ${total_price:.2f}</p>
+                    </div>
+                    <p>Thank you for booking with us!</p>
+                </div>
+                <div class="footer">
+                    <p>Event Management System &copy; 2024 | Booking Confirmation</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+
+        text_content = f"""
+        Booking Confirmation!
+        
+        Hello {username},
+        
+        Your booking has been confirmed for: {event_title}
+        
+        Booking ID: #{booking_id}
+        Number of Seats: {seats}
+        Total Paid: ${total_price:.2f}
+        
+        Thank you for booking with us!
+        """
+
+        return EmailService.send_email(
+            to_email=to_email,
+            subject=f"Booking Confirmed - {event_title}",
             html_content=html_content,
             text_content=text_content
         )
