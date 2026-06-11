@@ -143,7 +143,7 @@ class BookingService:
         user_id: int,
         is_admin: bool = False
     ) -> Booking:
-        """Cancel a booking"""
+        """Cancel a booking and notify next user in waitlist"""
         booking = BookingService.get_booking_by_id(db, booking_id)
 
         if not is_admin and booking.user_id != user_id:
@@ -168,6 +168,10 @@ class BookingService:
         db.refresh(booking)
 
         logger.info(f"Booking cancelled: Booking {booking_id} by User {user_id} (Admin: {is_admin})")
+        
+        # Process waitlist for this event
+        from app.services.waitlist_service import WaitlistService
+        WaitlistService.process_cancellation(db, event.id)
 
         return booking
 

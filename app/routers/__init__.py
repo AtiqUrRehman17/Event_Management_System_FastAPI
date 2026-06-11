@@ -5,6 +5,7 @@ from .events import router as events_router
 from .bookings import router as bookings_router
 from .oauth import router as oauth_router
 from .invoice import router as invoice_router
+from .waitlist import router as waitlist_router
 
 __all__ = [
     "auth_router",
@@ -14,4 +15,5 @@ __all__ = [
     "bookings_router",
     "oauth_router",
     "invoice_router",
+    "waitlist_router",
 ]

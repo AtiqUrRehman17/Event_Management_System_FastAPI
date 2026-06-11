@@ -19,11 +19,13 @@ from app.routers import (
     events_router,
     bookings_router,
     oauth_router,
-    invoice_router,  # NEW: Invoice router
+    invoice_router,
+    waitlist_router,
 )
 from app.utils import register_error_handlers
 from app.services.event_service import EventService
 from app.services.auth_service import AuthService
+from app.services.waitlist_service import WaitlistService
 from app.models.email_verification_token import EmailVerificationToken
 from app.models.password_reset_token import PasswordResetToken
 from app.models.token_blacklist import TokenBlacklist
@@ -105,6 +107,19 @@ def run_cleanup_verification_tokens():
         db.close()
 
 
+def run_cleanup_expired_waitlist():
+    """Scheduler job: clean up expired waitlist notifications every hour"""
+    db = SessionLocal()
+    try:
+        count = WaitlistService.cleanup_expired_notifications(db)
+        if count > 0:
+            logger.info(f"Scheduler: Cleaned up {count} expired waitlist notifications")
+    except Exception as e:
+        logger.error(f"Scheduler: Waitlist cleanup failed - {str(e)}")
+    finally:
+        db.close()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager"""
@@ -160,8 +175,16 @@ async def lifespan(app: FastAPI):
         replace_existing=True
     )
 
+    scheduler.add_job(
+        run_cleanup_expired_waitlist,
+        trigger=IntervalTrigger(hours=1),
+        id="cleanup_expired_waitlist",
+        name="Clean up expired waitlist notifications",
+        replace_existing=True
+    )
+
     scheduler.start()
-    logger.info("Scheduler started with 4 jobs")
+    logger.info("Scheduler started with 5 jobs")
     logger.info("Event Management System is ready!")
 
     yield
@@ -252,4 +275,5 @@ app.include_router(categories_router, prefix=settings.API_PREFIX)
 app.include_router(events_router, prefix=settings.API_PREFIX)
 app.include_router(bookings_router, prefix=settings.API_PREFIX)
 app.include_router(oauth_router, prefix=settings.API_PREFIX)
-app.include_router(invoice_router, prefix=settings.API_PREFIX)  # NEW: Invoice router
+app.include_router(invoice_router, prefix=settings.API_PREFIX)
+app.include_router(waitlist_router, prefix=settings.API_PREFIX)
