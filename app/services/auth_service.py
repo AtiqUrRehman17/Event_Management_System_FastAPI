@@ -2,7 +2,7 @@ from sqlalchemy.orm import Session
 from datetime import datetime, timezone, timedelta
 from typing import Tuple, Optional
 import secrets
-from fastapi import HTTPException, status
+from fastapi import HTTPException, status, Request
 from app.models.user import User
 from app.models.token_blacklist import TokenBlacklist
 from app.models.password_reset_token import PasswordResetToken
@@ -21,6 +21,8 @@ from app.core.exceptions import (
 from app.core.enums import UserRole
 from app.services.email_service import EmailService
 from app.services.notification_service import NotificationService
+from app.services.audit_service import AuditService
+from app.models.audit_log import AuditActionType, AuditActionCategory
 import logging
 
 logger = logging.getLogger(__name__)
@@ -38,7 +40,7 @@ class AuthService:
         }
 
     @staticmethod
-    def register_user(db: Session, user_data: RegisterRequest) -> User:
+    def register_user(db: Session, user_data: RegisterRequest, request: Optional[Request] = None) -> User:
         """
         Register a new user and send verification email
         Returns: User object (token is NOT returned for security)
@@ -78,6 +80,23 @@ class AuthService:
 
         logger.info(f"User created successfully: {new_user.username} ({new_user.email})")
 
+        # Audit log: User registration
+        AuditService.log_action(
+            db=db,
+            user_id=new_user.id,
+            action=AuditActionType.USER_REGISTER,
+            category=AuditActionCategory.USER,
+            request=request,
+            entity_type="user",
+            entity_id=new_user.id,
+            details={
+                "username": new_user.username,
+                "email": new_user.email,
+                "first_name": new_user.first_name,
+                "last_name": new_user.last_name
+            }
+        )
+
         # Generate verification token
         verification_token = secrets.token_urlsafe(32)
         expires_at = get_current_utc() + timedelta(minutes=settings.VERIFICATION_TOKEN_EXPIRE_MINUTES)
@@ -113,7 +132,7 @@ class AuthService:
         return new_user
 
     @staticmethod
-    def verify_email(db: Session, token: str) -> dict:
+    def verify_email(db: Session, token: str, request: Optional[Request] = None) -> dict:
         """
         Verify user's email address using verification token
         """
@@ -156,7 +175,7 @@ class AuthService:
         return {"message": "Email verified successfully", "is_verified": True}
 
     @staticmethod
-    def resend_verification_email(db: Session, email: str) -> dict:
+    def resend_verification_email(db: Session, email: str, request: Optional[Request] = None) -> dict:
         """Resend verification email to user"""
         user = db.query(User).filter(User.email == email).first()
         if not user:
@@ -208,21 +227,58 @@ class AuthService:
             return {"message": "Unable to send verification email. Please try again later."}
 
     @staticmethod
-    def login_user(db: Session, login_data: LoginRequest) -> Tuple[User, str, str]:
+    def login_user(db: Session, login_data: LoginRequest, request: Optional[Request] = None) -> Tuple[User, str, str]:
         """Authenticate user using username and password"""
         user = db.query(User).filter(
             User.username == login_data.username.lower()
         ).first()
+        
         if not user:
+            # Audit log: Failed login - user not found
+            AuditService.log_action(
+                db=db,
+                user_id=None,
+                action=AuditActionType.USER_LOGIN_FAILED,
+                category=AuditActionCategory.AUTH,
+                request=request,
+                details={"username": login_data.username, "reason": "User not found"}
+            )
             raise InvalidCredentialsException()
 
         if not verify_password(login_data.password, user.password_hash):
+            # Audit log: Failed login - wrong password
+            AuditService.log_action(
+                db=db,
+                user_id=user.id,
+                action=AuditActionType.USER_LOGIN_FAILED,
+                category=AuditActionCategory.AUTH,
+                request=request,
+                details={"username": login_data.username, "reason": "Invalid password"}
+            )
             raise InvalidCredentialsException()
 
         if not user.is_active:
+            # Audit log: Failed login - inactive account
+            AuditService.log_action(
+                db=db,
+                user_id=user.id,
+                action=AuditActionType.USER_LOGIN_FAILED,
+                category=AuditActionCategory.AUTH,
+                request=request,
+                details={"username": login_data.username, "reason": "Account inactive"}
+            )
             raise InvalidCredentialsException()
 
         if settings.REQUIRE_EMAIL_VERIFICATION and not user.is_verified:
+            # Audit log: Failed login - email not verified
+            AuditService.log_action(
+                db=db,
+                user_id=user.id,
+                action=AuditActionType.USER_LOGIN_FAILED,
+                category=AuditActionCategory.AUTH,
+                request=request,
+                details={"username": login_data.username, "reason": "Email not verified"}
+            )
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Email not verified. Please verify your email before logging in."
@@ -239,12 +295,24 @@ class AuthService:
             user_info=user_info
         )
 
+        # Audit log: Successful login
+        AuditService.log_action(
+            db=db,
+            user_id=user.id,
+            action=AuditActionType.USER_LOGIN_SUCCESS,
+            category=AuditActionCategory.AUTH,
+            request=request,
+            entity_type="user",
+            entity_id=user.id,
+            details={"username": user.username}
+        )
+
         return user, access_token, refresh_token
 
     @staticmethod
-    def forgot_password(db: Session, request: ForgotPasswordRequest) -> dict:
+    def forgot_password(db: Session, request_data: ForgotPasswordRequest, request: Optional[Request] = None) -> dict:
         """Send password reset email to user with reset token"""
-        user = db.query(User).filter(User.email == request.email).first()
+        user = db.query(User).filter(User.email == request_data.email).first()
         if not user:
             return {"message": "If your email is registered, you will receive a password reset email"}
 
@@ -273,10 +341,10 @@ class AuthService:
         return {"message": "If your email is registered, you will receive a password reset email"}
 
     @staticmethod
-    def reset_password(db: Session, request: ResetPasswordRequest) -> dict:
+    def reset_password(db: Session, request_data: ResetPasswordRequest, request: Optional[Request] = None) -> dict:
         """Reset password using valid token"""
         reset_record = db.query(PasswordResetToken).filter(
-            PasswordResetToken.token == request.token,
+            PasswordResetToken.token == request_data.token,
             PasswordResetToken.is_used == False
         ).first()
 
@@ -292,7 +360,10 @@ class AuthService:
         if not user:
             raise UserNotFoundException()
 
-        user.password_hash = hash_password(request.new_password)
+        # Store old password hash for audit (just the fact that it changed)
+        old_password_hash = user.password_hash
+        
+        user.password_hash = hash_password(request_data.new_password)
         user.updated_at = get_current_utc()
         reset_record.is_used = True
 
@@ -301,6 +372,18 @@ class AuthService:
         EmailService.send_password_reset_confirmation(
             to_email=user.email,
             username=user.username
+        )
+        
+        # Audit log: Password changed
+        AuditService.log_action(
+            db=db,
+            user_id=user.id,
+            action=AuditActionType.USER_PASSWORD_CHANGE,
+            category=AuditActionCategory.USER,
+            request=request,
+            entity_type="user",
+            entity_id=user.id,
+            details={"password_changed": True}
         )
         
         # Send password changed notification
@@ -313,7 +396,13 @@ class AuthService:
         return {"message": "Password reset successful. You can now login with your new password."}
 
     @staticmethod
-    def change_password(db: Session, user_id: int, current_password: str, new_password: str) -> User:
+    def change_password(
+        db: Session, 
+        user_id: int, 
+        current_password: str, 
+        new_password: str,
+        request: Optional[Request] = None
+    ) -> User:
         """Change user password"""
         user = AuthService.get_user_by_id(db, user_id)
 
@@ -325,6 +414,18 @@ class AuthService:
         
         db.commit()
         db.refresh(user)
+        
+        # Audit log: Password changed
+        AuditService.log_action(
+            db=db,
+            user_id=user.id,
+            action=AuditActionType.USER_PASSWORD_CHANGE,
+            category=AuditActionCategory.USER,
+            request=request,
+            entity_type="user",
+            entity_id=user.id,
+            details={"password_changed": True}
+        )
         
         # Send password changed notification
         try:
@@ -345,7 +446,7 @@ class AuthService:
         return user
 
     @staticmethod
-    def refresh_access_token(db: Session, refresh_token: str) -> Tuple[str, str]:
+    def refresh_access_token(db: Session, refresh_token: str, request: Optional[Request] = None) -> Tuple[str, str]:
         """Generate new tokens using refresh token"""
         if AuthService.is_token_blacklisted(db, refresh_token):
             raise InvalidTokenException()
@@ -378,12 +479,29 @@ class AuthService:
         return new_access_token, new_refresh_token
 
     @staticmethod
-    def logout_user(db: Session, access_token: str, refresh_token: Optional[str] = None) -> dict:
+    def logout_user(
+        db: Session, 
+        access_token: str, 
+        refresh_token: Optional[str] = None,
+        request: Optional[Request] = None
+    ) -> dict:
         """Logout user by blacklisting tokens"""
         try:
             payload = Security.verify_token(access_token, token_type="access")
             expires_at = datetime.fromtimestamp(payload["exp"])
             AuthService._blacklist_token(db, access_token, expires_at)
+            
+            # Extract user_id for audit log
+            user_id = payload.get("sub")
+            if user_id:
+                AuditService.log_action(
+                    db=db,
+                    user_id=int(user_id),
+                    action=AuditActionType.USER_LOGOUT,
+                    category=AuditActionCategory.AUTH,
+                    request=request,
+                    details={"logout": True}
+                )
         except Exception as e:
             logger.warning(f"Could not blacklist access token: {str(e)}")
 
