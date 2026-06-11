@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query, status, Body
+from fastapi import APIRouter, Depends, Query, status, Body,Request
 from fastapi.responses import StreamingResponse, Response
 from sqlalchemy.orm import Session
 from typing import Optional
@@ -9,7 +9,8 @@ from app.models.event import Event
 from app.models.waitlist import Waitlist, WaitlistStatus
 from app.schemas.booking import (
     BookingCreate, BookingFilterParams, BookingSortField, BookingSortOrder,
-    BookingListResponse, BookingDetailResponse, BookingSummaryResponse
+    BookingListResponse, BookingDetailResponse, BookingSummaryResponse,
+    BookingHistoryFilterParams
 )
 from app.services.booking_service import BookingService
 from app.services.event_service import EventService
@@ -18,13 +19,14 @@ from app.utils.response import success_response, paginated_response
 from app.core.enums import BookingStatus, UserRole, EventStatus
 from app.pagination import PaginationParams, get_pagination_params
 from app.core.exceptions import EventNotFoundException
-
+import requests
 router = APIRouter(prefix="/bookings", tags=["Bookings"])
 
 
 @router.post("/", response_model=dict, status_code=status.HTTP_201_CREATED)
 async def create_booking(
     booking_data: BookingCreate,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -100,7 +102,7 @@ async def create_booking(
         )
     
     # Normal booking flow
-    booking = BookingService.create_booking(db, current_user.id, booking_data)
+    booking = BookingService.create_booking(db, current_user.id, booking_data, request)
     event = EventService.get_event_by_id(db, booking.event_id)
 
     return success_response(
@@ -203,6 +205,64 @@ async def get_my_bookings(
             }
         },
         message="Bookings retrieved successfully"
+    )
+
+
+@router.get("/history", response_model=dict)
+async def get_booking_history(
+    type: Optional[str] = Query(None, description="Filter by type: upcoming, past, cancelled"),
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    min_price: Optional[float] = None,
+    max_price: Optional[float] = None,
+    event_name: Optional[str] = None,
+    category_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Get dedicated booking history with categorized bookings.
+    Shows upcoming, past, and cancelled bookings separately.
+    
+    Filters available:
+    - type: Filter by booking type (upcoming, past, cancelled)
+    - start_date/end_date: Filter by booking date range
+    - min_price/max_price: Filter by total price range
+    - event_name: Search by event name
+    - category_id: Filter by event category
+    """
+    filters = BookingHistoryFilterParams(
+        type=type,
+        start_date=start_date,
+        end_date=end_date,
+        min_price=min_price,
+        max_price=max_price,
+        event_name=event_name,
+        category_id=category_id
+    )
+    
+    history = BookingService.get_booking_history(db, current_user.id, filters)
+    
+    return success_response(
+        data=history,
+        message="Booking history retrieved successfully"
+    )
+
+
+@router.get("/statistics", response_model=dict)
+async def get_booking_statistics(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Get detailed booking statistics for user.
+    Includes monthly spending, popular categories, and booking patterns.
+    """
+    stats = BookingService.get_booking_statistics(db, current_user.id)
+    
+    return success_response(
+        data=stats,
+        message="Booking statistics retrieved successfully"
     )
 
 
@@ -345,6 +405,7 @@ async def get_booking_detail(
 @router.post("/{booking_id}/cancel", response_model=dict)
 async def cancel_booking(
     booking_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -355,7 +416,7 @@ async def cancel_booking(
     - When a booking is cancelled, the next person on the waitlist will be notified
     """
     is_admin = current_user.role == UserRole.ADMIN
-    booking = BookingService.cancel_booking(db, booking_id, current_user.id, is_admin)
+    booking = BookingService.cancel_booking(db, booking_id, current_user.id, is_admin, request)
     event = EventService.get_event_by_id(db, booking.event_id)
 
     return success_response(
