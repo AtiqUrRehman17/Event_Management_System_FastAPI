@@ -11,6 +11,7 @@ from app.core.enums import EventStatus, BookingStatus
 from app.core.exceptions import EventNotFoundException, PermissionDeniedException
 from app.utils.datetime_utils import get_current_utc
 from app.services.email_service import EmailService
+from app.services.notification_service import NotificationService
 import logging
 
 logger = logging.getLogger(__name__)
@@ -73,14 +74,32 @@ class WaitlistService:
         db.commit()
         db.refresh(waitlist_entry)
         
-        # Send confirmation email (optional)
+        # Send confirmation email
         user = db.query(User).filter(User.id == user_id).first()
-        EmailService.send_waitlist_joined_email(
-            to_email=user.email,
-            username=user.username,
-            event_title=event.title,
-            position=waitlist_entry.position
-        )
+        try:
+            EmailService.send_waitlist_joined_email(
+                to_email=user.email,
+                username=user.username,
+                event_title=event.title,
+                position=waitlist_entry.position
+            )
+        except Exception as e:
+            logger.error(f"Failed to send waitlist joined email: {str(e)}")
+        
+        # Create in-app notification
+        try:
+            from app.models.notification import NotificationType, NotificationChannel
+            NotificationService.create_notification(
+                db=db,
+                user_id=user_id,
+                notification_type=NotificationType.WAITLIST_PROMOTION,
+                title="Added to Waitlist",
+                message=f"You have been added to the waitlist for '{event.title}'. Your position is #{waitlist_entry.position}.",
+                channel=NotificationChannel.IN_APP,
+                metadata={"event_id": event_id, "position": waitlist_entry.position}
+            )
+        except Exception as e:
+            logger.error(f"Failed to create waitlist notification: {str(e)}")
         
         logger.info(f"User {user_id} joined waitlist for event {event_id} at position {waitlist_entry.position}")
         
@@ -122,7 +141,6 @@ class WaitlistService:
         ).scalar() or 0
         
         # Calculate estimated chance based on position and total capacity
-        # This is a simple estimation - can be enhanced based on historical data
         if entry.position <= 5:
             estimated_chance = "High"
         elif entry.position <= 15:
@@ -166,8 +184,9 @@ class WaitlistService:
                 detail="You are not on the waitlist for this event"
             )
         
-        # Store position for logging
+        # Store position and event title for logging
         old_position = entry.position
+        event = db.query(Event).filter(Event.id == event_id).first()
         
         # Update status
         entry.status = WaitlistStatus.CANCELLED
@@ -175,6 +194,22 @@ class WaitlistService:
         
         # Recalculate positions for remaining users
         WaitlistService._recalculate_positions(db, event_id)
+        
+        # Create notification for leaving waitlist
+        if event:
+            try:
+                from app.models.notification import NotificationType, NotificationChannel
+                NotificationService.create_notification(
+                    db=db,
+                    user_id=user_id,
+                    notification_type=NotificationType.WAITLIST_EXPIRY,
+                    title="Left Waitlist",
+                    message=f"You have left the waitlist for '{event.title}'.",
+                    channel=NotificationChannel.IN_APP,
+                    metadata={"event_id": event_id}
+                )
+            except Exception as e:
+                logger.error(f"Failed to create leave waitlist notification: {str(e)}")
         
         logger.info(f"User {user_id} left waitlist for event {event_id} (was position {old_position})")
         
@@ -220,13 +255,32 @@ class WaitlistService:
         user = db.query(User).filter(User.id == next_in_line.user_id).first()
         event = db.query(Event).filter(Event.id == event_id).first()
         
-        EmailService.send_waitlist_notification_email(
-            to_email=user.email,
-            username=user.username,
-            event_title=event.title,
-            event_id=event_id,
-            expires_at=next_in_line.expires_at
-        )
+        if user and event:
+            try:
+                EmailService.send_waitlist_notification_email(
+                    to_email=user.email,
+                    username=user.username,
+                    event_title=event.title,
+                    event_id=event_id,
+                    expires_at=next_in_line.expires_at
+                )
+            except Exception as e:
+                logger.error(f"Failed to send waitlist notification email: {str(e)}")
+            
+            # Create in-app notification
+            try:
+                from app.models.notification import NotificationType, NotificationChannel
+                NotificationService.create_notification(
+                    db=db,
+                    user_id=next_in_line.user_id,
+                    notification_type=NotificationType.WAITLIST_PROMOTION,
+                    title="Spot Available! 🎉",
+                    message=f"A spot has opened up for '{event.title}'! You have 48 hours to confirm your spot.",
+                    channel=NotificationChannel.IN_APP,
+                    metadata={"event_id": event_id, "expires_at": next_in_line.expires_at.isoformat()}
+                )
+            except Exception as e:
+                logger.error(f"Failed to create waitlist promotion notification: {str(e)}")
         
         logger.info(f"Notified user {next_in_line.user_id} about available spot for event {event_id}")
     
@@ -262,6 +316,23 @@ class WaitlistService:
         
         # Recalculate positions
         WaitlistService._recalculate_positions(db, event_id)
+        
+        # Create confirmation notification
+        event = db.query(Event).filter(Event.id == event_id).first()
+        if event:
+            try:
+                from app.models.notification import NotificationType, NotificationChannel
+                NotificationService.create_notification(
+                    db=db,
+                    user_id=user_id,
+                    notification_type=NotificationType.WAITLIST_PROMOTION,
+                    title="Spot Confirmed!",
+                    message=f"You have confirmed your spot for '{event.title}'. You can now book your ticket.",
+                    channel=NotificationChannel.IN_APP,
+                    metadata={"event_id": event_id}
+                )
+            except Exception as e:
+                logger.error(f"Failed to create spot confirmation notification: {str(e)}")
         
         logger.info(f"User {user_id} confirmed spot for event {event_id}")
         

@@ -21,6 +21,7 @@ from app.core.exceptions import (
 from app.core.enums import EventStatus, BookingStatus
 from app.pagination import PaginationParams, paginate_query
 from app.utils.datetime_utils import get_current_utc
+from app.services.notification_service import NotificationService
 import logging
 
 logger = logging.getLogger(__name__)
@@ -64,7 +65,7 @@ class BookingService:
             number_of_seats=booking_data.number_of_seats,
             total_price=total_price,
             status=BookingStatus.ACTIVE,
-            payment_status="pending",  # Initialize payment status
+            payment_status="pending",
             tax_rate=0.0,
             tax_amount=0.0
         )
@@ -76,6 +77,12 @@ class BookingService:
         db.refresh(booking)
 
         logger.info(f"Booking created: User {user_id} booked {booking_data.number_of_seats} seat(s) for event {booking_data.event_id}")
+        
+        # Send booking confirmation notification
+        try:
+            NotificationService.send_booking_confirmation(db, booking.id)
+        except Exception as e:
+            logger.error(f"Failed to send booking confirmation notification: {str(e)}")
 
         return booking
 
@@ -169,9 +176,18 @@ class BookingService:
 
         logger.info(f"Booking cancelled: Booking {booking_id} by User {user_id} (Admin: {is_admin})")
         
+        # Send booking cancellation notification
+        try:
+            NotificationService.send_booking_cancellation(db, booking.id)
+        except Exception as e:
+            logger.error(f"Failed to send booking cancellation notification: {str(e)}")
+        
         # Process waitlist for this event
         from app.services.waitlist_service import WaitlistService
-        WaitlistService.process_cancellation(db, event.id)
+        try:
+            WaitlistService.process_cancellation(db, event.id)
+        except Exception as e:
+            logger.error(f"Failed to process waitlist after cancellation: {str(e)}")
 
         return booking
 
@@ -504,7 +520,6 @@ class BookingService:
         story.append(Spacer(1, 12))
         
         # Add generation date
-        from datetime import datetime
         story.append(Paragraph(f"Generated on: {datetime.now().strftime('%B %d, %Y at %H:%M:%S')}", styles['Normal']))
         story.append(Spacer(1, 20))
         
