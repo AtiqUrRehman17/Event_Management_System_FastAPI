@@ -21,6 +21,8 @@ from app.routers import (
     oauth_router,
     invoice_router,
     waitlist_router,
+    notifications_router,
+    admin_router,
 )
 from app.utils import register_error_handlers
 from app.services.event_service import EventService
@@ -277,3 +279,5 @@ app.include_router(bookings_router, prefix=settings.API_PREFIX)
 app.include_router(oauth_router, prefix=settings.API_PREFIX)
 app.include_router(invoice_router, prefix=settings.API_PREFIX)
 app.include_router(waitlist_router, prefix=settings.API_PREFIX)
+app.include_router(notifications_router, prefix=settings.API_PREFIX)
+app.include_router(admin_router, prefix=settings.API_PREFIX)
