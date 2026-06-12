@@ -1,0 +1,251 @@
+{% extends "base.html" %}
+
+{% block title %}EventHub - Discover Amazing Events{% endblock %}
+
+{% block content %}
+
+<!-- Hero Section -->
+<section class="hero-section text-white text-center py-5" style="background: linear-gradient(135deg, #0d6efd 0%, #6610f2 100%);">
+    <div class="container py-5">
+        <h1 class="display-4 fw-bold mb-3">
+            <i class="fas fa-calendar-alt me-2"></i>Discover Amazing Events
+        </h1>
+        <p class="lead mb-4">Find and book the best events happening around you. Concerts, workshops, sports, and more!</p>
+        <div class="row justify-content-center">
+            <div class="col-md-6">
+                <div class="input-group input-group-lg shadow">
+                    <input type="text" class="form-control" id="heroSearch" placeholder="Search events...">
+                    <button class="btn btn-warning" onclick="searchEvents()">
+                        <i class="fas fa-search"></i> Search
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Stats Section -->
+<section class="py-4 bg-light">
+    <div class="container">
+        <div class="row text-center g-3">
+            <div class="col-md-3 col-6">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-body">
+                        <i class="fas fa-calendar-check fa-2x text-primary mb-2"></i>
+                        <h3 class="fw-bold" id="statEvents">-</h3>
+                        <p class="text-muted mb-0">Upcoming Events</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 col-6">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-body">
+                        <i class="fas fa-users fa-2x text-success mb-2"></i>
+                        <h3 class="fw-bold" id="statUsers">-</h3>
+                        <p class="text-muted mb-0">Registered Users</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 col-6">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-body">
+                        <i class="fas fa-ticket-alt fa-2x text-warning mb-2"></i>
+                        <h3 class="fw-bold" id="statBookings">-</h3>
+                        <p class="text-muted mb-0">Total Bookings</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 col-6">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-body">
+                        <i class="fas fa-th-large fa-2x text-info mb-2"></i>
+                        <h3 class="fw-bold" id="statCategories">-</h3>
+                        <p class="text-muted mb-0">Categories</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Categories Section -->
+<section class="py-5">
+    <div class="container">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2 class="fw-bold"><i class="fas fa-th-large me-2"></i>Browse Categories</h2>
+        </div>
+        <div class="row g-3" id="categoriesContainer">
+            <!-- JS will populate -->
+            <div class="text-center py-4">
+                <div class="spinner-border text-primary" role="status"></div>
+                <p class="text-muted mt-2">Loading categories...</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Featured Events Section -->
+<section class="py-5 bg-light">
+    <div class="container">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2 class="fw-bold"><i class="fas fa-star me-2"></i>Upcoming Events</h2>
+            <a href="/events" class="btn btn-outline-primary">View All <i class="fas fa-arrow-right ms-1"></i></a>
+        </div>
+        <div class="row g-4" id="featuredEventsContainer">
+            <!-- JS will populate -->
+            <div class="text-center py-4">
+                <div class="spinner-border text-primary" role="status"></div>
+                <p class="text-muted mt-2">Loading events...</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        loadHomePageData();
+    });
+
+    async function loadHomePageData() {
+        // Load categories
+        try {
+            const catResponse = await apiCall('/api/v1/categories/?flat=true');
+            if (catResponse.success) {
+                renderCategories(catResponse.data);
+            }
+        } catch (e) {
+            document.getElementById('categoriesContainer').innerHTML =
+                '<p class="text-muted text-center">Unable to load categories</p>';
+        }
+
+        // Load featured events
+        try {
+            const eventResponse = await apiCall('/api/v1/events/?limit=6');
+            if (eventResponse.success) {
+                renderFeaturedEvents(eventResponse.data);
+                document.getElementById('statEvents').textContent = eventResponse.meta?.total || eventResponse.data.length;
+            }
+        } catch (e) {
+            document.getElementById('featuredEventsContainer').innerHTML =
+                '<p class="text-muted text-center">Unable to load events</p>';
+        }
+
+        // Load stats if admin
+        loadHomeStats();
+    }
+
+    async function loadHomeStats() {
+        try {
+            const token = getToken();
+            if (token) {
+                const statsResponse = await apiCall('/api/v1/admin/dashboard/stats');
+                if (statsResponse.success) {
+                    document.getElementById('statEvents').textContent = statsResponse.data.upcoming_events || 0;
+                    document.getElementById('statUsers').textContent = statsResponse.data.total_users || 0;
+                    document.getElementById('statBookings').textContent = statsResponse.data.total_bookings || 0;
+                    document.getElementById('statCategories').textContent = statsResponse.data.popular_categories?.length || 0;
+                }
+            }
+        } catch (e) {
+            // Not admin or not logged in - stats stay as loaded
+        }
+    }
+
+    function renderCategories(categories) {
+        const container = document.getElementById('categoriesContainer');
+        if (!categories || categories.length === 0) {
+            container.innerHTML = '<p class="text-muted text-center">No categories available</p>';
+            return;
+        }
+
+        container.innerHTML = categories.slice(0, 8).map(cat => `
+            <div class="col-lg-3 col-md-4 col-6">
+                <a href="/events?category_id=${cat.id}" class="text-decoration-none">
+                    <div class="card border-0 shadow-sm h-100 category-card text-center">
+                        <div class="card-body py-4">
+                            <i class="fas ${cat.icon || 'fa-tag'} fa-2x mb-3" style="color: ${cat.color || '#3498db'}"></i>
+                            <h6 class="fw-bold text-dark">${cat.name}</h6>
+                            <small class="text-muted">${cat.description || ''}</small>
+                        </div>
+                    </div>
+                </a>
+            </div>
+        `).join('');
+
+        document.getElementById('statCategories').textContent = categories.length;
+    }
+
+    function renderFeaturedEvents(events) {
+        const container = document.getElementById('featuredEventsContainer');
+        if (!events || events.length === 0) {
+            container.innerHTML = `
+                <div class="col-12 text-center py-4">
+                    <i class="fas fa-calendar-times fa-3x text-muted mb-3"></i>
+                    <p class="text-muted">No upcoming events available</p>
+                </div>`;
+            return;
+        }
+
+        container.innerHTML = events.map(event => `
+            <div class="col-lg-4 col-md-6">
+                <div class="card border-0 shadow-sm h-100 event-card">
+                    <div class="card-img-top-wrapper" style="height: 200px; overflow: hidden; background: linear-gradient(135deg, ${event.category_color || '#3498db'}22, ${event.category_color || '#3498db'}44);">
+                        ${event.image_url
+                            ? `<img src="${event.image_url}" class="w-100 h-100" style="object-fit: cover;" alt="${event.title}">`
+                            : `<div class="d-flex align-items-center justify-content-center h-100">
+                                <i class="fas ${event.category_icon || 'fa-calendar'} fa-3x" style="color: ${event.category_color || '#3498db'}"></i>
+                               </div>`
+                        }
+                    </div>
+                    <div class="card-body d-flex flex-column">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <span class="badge bg-primary">${event.category_name || 'General'}</span>
+                            <span class="badge ${event.available_seats > 0 ? 'bg-success' : 'bg-danger'}">
+                                ${event.available_seats > 0 ? event.available_seats + ' seats left' : 'Sold Out'}
+                            </span>
+                        </div>
+                        <h5 class="card-title fw-bold">${event.title}</h5>
+                        <p class="card-text text-muted small flex-grow-1">
+                            ${event.description ? event.description.substring(0, 100) + '...' : 'No description'}
+                        </p>
+                        <div class="mt-auto">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <small class="text-muted">
+                                    <i class="fas fa-map-marker-alt me-1"></i>${event.location}
+                                </small>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <small class="text-muted">
+                                    <i class="fas fa-clock me-1"></i>${formatDate(event.event_date)}
+                                </small>
+                                <span class="fw-bold text-primary fs-5">
+                                    ${event.price > 0 ? '$' + event.price.toFixed(2) : 'FREE'}
+                                </span>
+                            </div>
+                            <a href="/events/${event.id}" class="btn btn-primary w-100">
+                                <i class="fas fa-eye me-1"></i>View Details
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    function searchEvents() {
+        const query = document.getElementById('heroSearch').value.trim();
+        if (query) {
+            window.location.href = `/events?search=${encodeURIComponent(query)}`;
+        } else {
+            window.location.href = '/events';
+        }
+    }
+
+    document.getElementById('heroSearch').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') searchEvents();
+    });
+</script>
+{% endblock %}

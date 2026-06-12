@@ -1,0 +1,248 @@
+{% extends "base.html" %}
+
+{% block title %}Browse Events - EventHub{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+
+    <!-- Page Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="fw-bold"><i class="fas fa-calendar me-2"></i>Browse Events</h2>
+    </div>
+
+    <!-- Search & Filter Bar -->
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="fas fa-search"></i></span>
+                        <input type="text" class="form-control" id="searchInput"
+                               placeholder="Search events..." value="">
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <select class="form-select" id="categoryFilter">
+                        <option value="">All Categories</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <input type="number" class="form-control" id="minPrice"
+                           placeholder="Min Price" min="0" step="0.01">
+                </div>
+                <div class="col-md-2">
+                    <input type="number" class="form-control" id="maxPrice"
+                           placeholder="Max Price" min="0" step="0.01">
+                </div>
+                <div class="col-md-1">
+                    <button class="btn btn-primary w-100" onclick="applyFilters()">
+                        <i class="fas fa-filter"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Events Grid -->
+    <div class="row g-4" id="eventsContainer">
+        <div class="text-center py-5">
+            <div class="spinner-border text-primary" role="status"></div>
+            <p class="text-muted mt-2">Loading events...</p>
+        </div>
+    </div>
+
+    <!-- Pagination -->
+    <nav class="mt-4" id="paginationContainer">
+        <ul class="pagination justify-content-center" id="pagination"></ul>
+    </nav>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let currentPage = 1;
+    let totalPages = 1;
+    const limit = 9;
+
+    document.addEventListener('DOMContentLoaded', function() {
+        // Read URL params
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('search')) document.getElementById('searchInput').value = params.get('search');
+        if (params.get('category_id')) document.getElementById('categoryFilter').value = params.get('category_id');
+        if (params.get('min_price')) document.getElementById('minPrice').value = params.get('min_price');
+        if (params.get('max_price')) document.getElementById('maxPrice').value = params.get('max_price');
+        if (params.get('page')) currentPage = parseInt(params.get('page'));
+
+        loadCategories();
+        loadEvents();
+    });
+
+    async function loadCategories() {
+        try {
+            const response = await apiCall('/api/v1/categories/?flat=true');
+            if (response.success) {
+                const select = document.getElementById('categoryFilter');
+                const currentValue = new URLSearchParams(window.location.search).get('category_id');
+                response.data.forEach(cat => {
+                    const option = document.createElement('option');
+                    option.value = cat.id;
+                    option.textContent = cat.name;
+                    if (currentValue && parseInt(currentValue) === cat.id) option.selected = true;
+                    select.appendChild(option);
+                });
+            }
+        } catch (e) {
+            console.error('Failed to load categories:', e);
+        }
+    }
+
+    async function loadEvents() {
+        const container = document.getElementById('eventsContainer');
+        container.innerHTML = `
+            <div class="col-12 text-center py-5">
+                <div class="spinner-border text-primary" role="status"></div>
+                <p class="text-muted mt-2">Loading events...</p>
+            </div>`;
+
+        let url = `/api/v1/events/?page=${currentPage}&limit=${limit}`;
+
+        const search = document.getElementById('searchInput').value.trim();
+        const category = document.getElementById('categoryFilter').value;
+        const minPrice = document.getElementById('minPrice').value;
+        const maxPrice = document.getElementById('maxPrice').value;
+
+        if (search) url += `&search=${encodeURIComponent(search)}`;
+        if (category) url += `&category_id=${category}`;
+        if (minPrice) url += `&min_price=${minPrice}`;
+        if (maxPrice) url += `&max_price=${maxPrice}`;
+
+        try {
+            const response = await apiCall(url);
+            if (response.success) {
+                renderEvents(response.data);
+                totalPages = response.meta?.total_pages || 1;
+                renderPagination();
+            } else {
+                container.innerHTML = '<div class="col-12 text-center py-5"><p class="text-muted">Failed to load events</p></div>';
+            }
+        } catch (e) {
+            container.innerHTML = '<div class="col-12 text-center py-5"><p class="text-muted">Error loading events</p></div>';
+        }
+    }
+
+    function renderEvents(events) {
+        const container = document.getElementById('eventsContainer');
+
+        if (!events || events.length === 0) {
+            container.innerHTML = `
+                <div class="col-12 text-center py-5">
+                    <i class="fas fa-calendar-times fa-4x text-muted mb-3"></i>
+                    <h4 class="text-muted">No Events Found</h4>
+                    <p class="text-muted">Try adjusting your search or filters</p>
+                    <button class="btn btn-outline-primary" onclick="clearFilters()">
+                        <i class="fas fa-times me-1"></i>Clear Filters
+                    </button>
+                </div>`;
+            return;
+        }
+
+        container.innerHTML = events.map(event => `
+            <div class="col-lg-4 col-md-6">
+                <div class="card border-0 shadow-sm h-100 event-card">
+                    <div class="position-relative" style="height: 200px; overflow: hidden; background: linear-gradient(135deg, ${event.category_color || '#3498db'}22, ${event.category_color || '#3498db'}44);">
+                        ${event.image_url
+                            ? `<img src="${event.image_url}" class="w-100 h-100" style="object-fit: cover;" alt="${event.title}">`
+                            : `<div class="d-flex align-items-center justify-content-center h-100">
+                                <i class="fas ${event.category_icon || 'fa-calendar'} fa-3x" style="color: ${event.category_color || '#3498db'}"></i>
+                               </div>`
+                        }
+                        <span class="position-absolute top-0 end-0 m-2 badge ${event.available_seats > 0 ? 'bg-success' : 'bg-danger'}">
+                            ${event.available_seats > 0 ? event.available_seats + ' seats left' : 'Sold Out'}
+                        </span>
+                    </div>
+                    <div class="card-body d-flex flex-column">
+                        <span class="badge bg-primary mb-2 align-self-start">${event.category_name || 'General'}</span>
+                        <h5 class="card-title fw-bold">${event.title}</h5>
+                        <p class="card-text text-muted small flex-grow-1">
+                            ${event.description ? event.description.substring(0, 100) + '...' : 'No description'}
+                        </p>
+                        <div class="mb-2">
+                            <small class="text-muted d-block">
+                                <i class="fas fa-map-marker-alt me-1 text-danger"></i>${event.location}
+                            </small>
+                            <small class="text-muted d-block">
+                                <i class="fas fa-clock me-1 text-primary"></i>${formatDate(event.event_date)}
+                            </small>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center mt-auto">
+                            <span class="fw-bold text-primary fs-5">
+                                ${event.price > 0 ? '$' + event.price.toFixed(2) : 'FREE'}
+                            </span>
+                            <a href="/events/${event.id}" class="btn btn-primary btn-sm">
+                                <i class="fas fa-eye me-1"></i>Details
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    function renderPagination() {
+        const pagination = document.getElementById('pagination');
+        if (totalPages <= 1) {
+            pagination.innerHTML = '';
+            return;
+        }
+
+        let html = '';
+
+        html += `<li class="page-item ${currentPage === 1 ? 'disabled' : ''}">
+            <a class="page-link" href="#" onclick="goToPage(${currentPage - 1})">&laquo; Prev</a>
+        </li>`;
+
+        for (let i = 1; i <= totalPages; i++) {
+            if (i === 1 || i === totalPages || (i >= currentPage - 2 && i <= currentPage + 2)) {
+                html += `<li class="page-item ${i === currentPage ? 'active' : ''}">
+                    <a class="page-link" href="#" onclick="goToPage(${i})">${i}</a>
+                </li>`;
+            } else if (i === currentPage - 3 || i === currentPage + 3) {
+                html += '<li class="page-item disabled"><a class="page-link">...</a></li>';
+            }
+        }
+
+        html += `<li class="page-item ${currentPage === totalPages ? 'disabled' : ''}">
+            <a class="page-link" href="#" onclick="goToPage(${currentPage + 1})">Next &raquo;</a>
+        </li>`;
+
+        pagination.innerHTML = html;
+    }
+
+    function goToPage(page) {
+        if (page < 1 || page > totalPages) return;
+        currentPage = page;
+        loadEvents();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function applyFilters() {
+        currentPage = 1;
+        loadEvents();
+    }
+
+    function clearFilters() {
+        document.getElementById('searchInput').value = '';
+        document.getElementById('categoryFilter').value = '';
+        document.getElementById('minPrice').value = '';
+        document.getElementById('maxPrice').value = '';
+        currentPage = 1;
+        loadEvents();
+    }
+
+    // Enter key on search
+    document.getElementById('searchInput').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') applyFilters();
+    });
+</script>
+{% endblock %}

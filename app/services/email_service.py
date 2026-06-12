@@ -6,6 +6,7 @@ from typing import Optional
 import logging
 from app.core.config import settings
 from datetime import datetime
+
 logger = logging.getLogger(__name__)
 
 
@@ -35,7 +36,7 @@ class EmailService:
         html_content: str,
         text_content: Optional[str] = None
     ) -> bool:
-        """Send email via SMTP (Gmail, etc.)"""
+        """Send email via SMTP (Gmail, Outlook, etc.)"""
         try:
             # Create message
             msg = MIMEMultipart("alternative")
@@ -81,6 +82,11 @@ class EmailService:
         text_content: Optional[str] = None
     ) -> bool:
         """Send email via Postmark API"""
+        # Check if Postmark is configured
+        if not settings.POSTMARK_API_TOKEN:
+            logger.error("Postmark API token not configured. Please set POSTMARK_API_TOKEN in .env or switch to SMTP")
+            return False
+        
         try:
             url = "https://api.postmarkapp.com/email"
             
@@ -116,8 +122,11 @@ class EmailService:
 
     @staticmethod
     def send_verification_email(to_email: str, username: str, verification_token: str) -> bool:
-        """Send email verification link to user"""
-        api_verify_endpoint = "/api/v1/auth/verify-email"
+        """
+        Send email verification link to user (one-click verification)
+        """
+        # Build the verification link (GET endpoint that user will click)
+        verification_link = f"{settings.FRONTEND_URL}/verify-email?token={verification_token}"
 
         html_content = f"""
         <!DOCTYPE html>
@@ -147,15 +156,14 @@ class EmailService:
                     border-top: none;
                     border-radius: 0 0 5px 5px;
                 }}
-                .token-box {{
-                    background-color: #f0f0f0;
-                    padding: 15px;
+                .button {{
+                    display: inline-block;
+                    padding: 12px 24px;
+                    background-color: #2196F3;
+                    color: white;
+                    text-decoration: none;
                     border-radius: 5px;
-                    font-family: monospace;
-                    font-size: 16px;
-                    word-break: break-all;
                     margin: 20px 0;
-                    border-left: 4px solid #2196F3;
                 }}
                 .footer {{
                     margin-top: 20px;
@@ -177,19 +185,12 @@ class EmailService:
             <div class="content">
                 <p>Hello <strong>{username}</strong>,</p>
                 <p>Thank you for registering with Event Management System. Please verify your email address to activate your account.</p>
-                <p>Use the token below to verify your email:</p>
-                <div class="token-box">
-                    <strong>Verification Token:</strong> {verification_token}
+                <div style="text-align: center;">
+                    <a href="{verification_link}" class="button">Verify Email Address</a>
                 </div>
-                <p>To verify your email, make a POST request to:</p>
-                <div class="token-box">
-                    <strong>API Endpoint:</strong> {api_verify_endpoint}<br>
-                    <strong>Request Body:</strong><br>
-                    {{<br>
-                    &nbsp;&nbsp;"token": "{verification_token}"<br>
-                    }}
-                </div>
-                <p class="warning"><strong>⚠️ This verification token will expire in {settings.VERIFICATION_TOKEN_EXPIRE_MINUTES} minutes ({int(settings.VERIFICATION_TOKEN_EXPIRE_MINUTES / 60)} hours).</strong></p>
+                <p>Or copy and paste this link into your browser:</p>
+                <p><a href="{verification_link}">{verification_link}</a></p>
+                <p class="warning"><strong>⚠️ This verification link will expire in {settings.VERIFICATION_TOKEN_EXPIRE_MINUTES} minutes ({int(settings.VERIFICATION_TOKEN_EXPIRE_MINUTES / 60)} hours).</strong></p>
                 <p>If you didn't create an account with us, please ignore this email.</p>
                 <hr>
                 <p>Once verified, you'll have full access to all features including booking events and managing your profile.</p>
@@ -208,15 +209,10 @@ class EmailService:
 
         Thank you for registering. Please verify your email address to activate your account.
 
-        Use the token below to verify your email:
+        Click the link below to verify your email:
+        {verification_link}
 
-        Verification Token: {verification_token}
-
-        To verify your email, make a POST request to:
-        API Endpoint: {api_verify_endpoint}
-        Request Body: {{"token": "{verification_token}"}}
-
-        This verification token will expire in {settings.VERIFICATION_TOKEN_EXPIRE_MINUTES} minutes ({int(settings.VERIFICATION_TOKEN_EXPIRE_MINUTES / 60)} hours).
+        This verification link will expire in {settings.VERIFICATION_TOKEN_EXPIRE_MINUTES} minutes ({int(settings.VERIFICATION_TOKEN_EXPIRE_MINUTES / 60)} hours).
 
         If you didn't create an account with us, please ignore this email.
 
