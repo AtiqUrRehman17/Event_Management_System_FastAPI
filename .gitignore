@@ -4,6 +4,7 @@
 .env
 .env.*
 !.env.example
+!.env.test
 
 # ============================================
 # Database Files
@@ -14,6 +15,13 @@
 *.db-journal
 event_management.db
 event_management.db-journal
+
+# ── Test Database ─────────────────────────
+test_event_management.db
+test_event_management.db-journal
+test_*.db
+test_*.sqlite
+test_*.sqlite3
 
 # ============================================
 # Python
@@ -104,6 +112,10 @@ uploads/
 *.svg
 !uploads/.gitkeep
 
+# ── Test Upload Directory ─────────────────
+test_uploads/
+test_uploads/**
+
 # ============================================
 # Logs
 # ============================================
@@ -112,17 +124,60 @@ logs/
 *.log.*
 pytest.log
 
+# ── Test Logs ─────────────────────────────
+test_logs/
+test_*.log
+
 # ============================================
 # Testing & Coverage
 # ============================================
+# Pytest
 .pytest_cache/
+pytest_cache/
+.pytest_tmp/
+
+# Coverage
 .coverage
-htmlcov/
-.tox/
 .coverage.*
 coverage.xml
+coverage.json
+htmlcov/
 *.cover
+*.coveragerc
+
+# Tox
+.tox/
+.nox/
+
+# Hypothesis
 .hypothesis/
+
+# Test Results & Reports
+test-results/
+test_results/
+junit.xml
+junit-*.xml
+test-report.xml
+report.xml
+
+# Test Output Files
+test_output/
+test_output.*
+
+# Pytest HTML Reports
+report.html
+test_report.html
+pytest_report.html
+
+# ── Test Database Artifacts ───────────────
+test_event_management.db
+test_event_management.db-shm
+test_event_management.db-wal
+
+# ── Test Cache ────────────────────────────
+.pytest_cache/
+**/.pytest_cache/
+**/pytest_cache/
 
 # ============================================
 # Alembic (Python cache only)
@@ -141,6 +196,12 @@ temp/
 *.pid
 instance/
 .webassets-cache
+
+# ── Test Temporary Files ──────────────────
+test_tmp/
+test_temp/
+*.test.tmp
+*.test.temp
 
 # ============================================
 # Backup Files
@@ -165,7 +226,59 @@ docker-compose.override.yml
 *.xlsx
 !requirements.txt
 
+# ── Test Report Files ─────────────────────
+test_*.pdf
+test_*.csv
+test_*.xlsx
+bookings_export_*.pdf
+bookings_export_*.csv
+invoice_*.pdf
+revenue_report_*.csv
+bookings_report_*.csv
+
 # ============================================
 # Jupyter Notebook
 # ============================================
 .ipynb_checkpoints/
+
+# ============================================
+# Testing Specific
+# ============================================
+
+# ── Pytest Configuration Cache ────────────
+.pytest_cache/
+pytestdebug.log
+
+# ── Test Coverage Reports ─────────────────
+htmlcov/
+.coverage
+coverage/
+cov_report/
+cov.xml
+
+# ── Mock & Patch Artifacts ────────────────
+*.mock
+*.patch
+
+# ── Test Fixtures Generated Files ─────────
+test_fixtures_output/
+fixture_output/
+
+# ── Performance Test Results ──────────────
+.benchmarks/
+benchmark_results/
+profiling_results/
+*.prof
+*.pstats
+
+# ── Test Environment ──────────────────────
+.env.test.local
+.env.testing
+.env.test.backup
+
+# ── pyproject.toml test cache ─────────────
+.cache/
+
+# ── Test Screenshots (if any UI testing) ──
+screenshots/
+test_screenshots/

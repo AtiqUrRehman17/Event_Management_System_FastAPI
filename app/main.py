@@ -10,7 +10,8 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 import logging
 from pathlib import Path
-
+from dotenv import load_dotenv
+load_dotenv()
 from app.core import settings
 from app.core.database import engine, Base, SessionLocal
 from app.core.seed import seed_all
