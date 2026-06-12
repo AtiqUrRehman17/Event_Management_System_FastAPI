@@ -1,0 +1,273 @@
+{% extends "base.html" %}
+
+{% block title %}Register - EventHub{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card shadow border-0">
+                <div class="card-body p-4">
+                    <div class="text-center mb-4">
+                        <i class="fas fa-user-plus fa-2x text-primary mb-2"></i>
+                        <h3 class="fw-bold">Create Account</h3>
+                        <p class="text-muted">Join EventHub and start booking amazing events</p>
+                    </div>
+
+                    <form id="registerForm" onsubmit="handleRegister(event)">
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="firstName" class="form-label fw-semibold">
+                                    <i class="fas fa-user me-1"></i>First Name
+                                </label>
+                                <input type="text" class="form-control"
+                                       id="firstName" name="first_name"
+                                       placeholder="John" required minlength="2">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="lastName" class="form-label fw-semibold">
+                                    <i class="fas fa-user me-1"></i>Last Name
+                                </label>
+                                <input type="text" class="form-control"
+                                       id="lastName" name="last_name"
+                                       placeholder="Doe" required minlength="2">
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="regUsername" class="form-label fw-semibold">
+                                <i class="fas fa-at me-1"></i>Username
+                            </label>
+                            <input type="text" class="form-control"
+                                   id="regUsername" name="username"
+                                   placeholder="johndoe" required minlength="3" maxlength="50">
+                            <div class="form-text">Letters, numbers, and underscores only</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="regEmail" class="form-label fw-semibold">
+                                <i class="fas fa-envelope me-1"></i>Email
+                            </label>
+                            <input type="email" class="form-control"
+                                   id="regEmail" name="email"
+                                   placeholder="john@example.com" required>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="regPassword" class="form-label fw-semibold">
+                                <i class="fas fa-lock me-1"></i>Password
+                            </label>
+                            <div class="input-group">
+                                <input type="password" class="form-control"
+                                       id="regPassword" name="password"
+                                       placeholder="Min 8 chars, uppercase, lowercase, digit"
+                                       required minlength="8">
+                                <button class="btn btn-outline-secondary" type="button"
+                                        onclick="togglePassword('regPassword')">
+                                    <i class="fas fa-eye" id="regPasswordEye"></i>
+                                </button>
+                            </div>
+                            <!-- Password strength indicator -->
+                            <div class="mt-2" id="passwordStrength"></div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="confirmPassword" class="form-label fw-semibold">
+                                <i class="fas fa-lock me-1"></i>Confirm Password
+                            </label>
+                            <input type="password" class="form-control"
+                                   id="confirmPassword" name="confirm_password"
+                                   placeholder="Re-enter your password" required minlength="8">
+                        </div>
+
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" id="agreeTerms" required>
+                            <label class="form-check-label" for="agreeTerms">
+                                I agree to the <a href="#" class="text-decoration-none">Terms & Conditions</a>
+                            </label>
+                        </div>
+
+                        <!-- Alert for errors -->
+                        <div class="alert alert-danger d-none" id="registerError" role="alert"></div>
+                        <div class="alert alert-success d-none" id="registerSuccess" role="alert"></div>
+
+                        <button type="submit" class="btn btn-primary btn-lg w-100 mb-3" id="registerBtn">
+                            <i class="fas fa-user-plus me-2"></i>Create Account
+                        </button>
+                    </form>
+
+                    <hr>
+
+                    <!-- OAuth Buttons -->
+                    <div class="d-grid gap-2">
+                        <a href="/api/v1/auth/google/login" class="btn btn-outline-danger">
+                            <i class="fab fa-google me-2"></i>Sign up with Google
+                        </a>
+                        <a href="/api/v1/auth/facebook/login" class="btn btn-outline-primary">
+                            <i class="fab fa-facebook me-2"></i>Sign up with Facebook
+                        </a>
+                    </div>
+
+                    <hr>
+
+                    <p class="text-center mb-0">
+                        Already have an account?
+                        <a href="/login" class="text-decoration-none fw-semibold">Sign In</a>
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    async function handleRegister(event) {
+        event.preventDefault();
+
+        const registerBtn = document.getElementById('registerBtn');
+        const errorDiv = document.getElementById('registerError');
+        const successDiv = document.getElementById('registerSuccess');
+
+        // Reset alerts
+        errorDiv.classList.add('d-none');
+        successDiv.classList.add('d-none');
+
+        // Get form values
+        const firstName = document.getElementById('firstName').value.trim();
+        const lastName = document.getElementById('lastName').value.trim();
+        const username = document.getElementById('regUsername').value.trim().toLowerCase();
+        const email = document.getElementById('regEmail').value.trim();
+        const password = document.getElementById('regPassword').value;
+        const confirmPassword = document.getElementById('confirmPassword').value;
+
+        // Client-side validation
+        if (password !== confirmPassword) {
+            errorDiv.textContent = 'Passwords do not match.';
+            errorDiv.classList.remove('d-none');
+            return;
+        }
+
+        if (password.length < 8) {
+            errorDiv.textContent = 'Password must be at least 8 characters long.';
+            errorDiv.classList.remove('d-none');
+            return;
+        }
+
+        if (!/[A-Z]/.test(password)) {
+            errorDiv.textContent = 'Password must contain at least one uppercase letter.';
+            errorDiv.classList.remove('d-none');
+            return;
+        }
+
+        if (!/[a-z]/.test(password)) {
+            errorDiv.textContent = 'Password must contain at least one lowercase letter.';
+            errorDiv.classList.remove('d-none');
+            return;
+        }
+
+        if (!/\d/.test(password)) {
+            errorDiv.textContent = 'Password must contain at least one digit.';
+            errorDiv.classList.remove('d-none');
+            return;
+        }
+
+        if (!/^[a-zA-Z0-9_]+$/.test(username)) {
+            errorDiv.textContent = 'Username can only contain letters, numbers, and underscores.';
+            errorDiv.classList.remove('d-none');
+            return;
+        }
+
+        // Disable button
+        registerBtn.disabled = true;
+        registerBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Creating account...';
+
+        try {
+            const response = await fetch('/api/v1/auth/register', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    username: username,
+                    email: email,
+                    password: password,
+                    first_name: firstName,
+                    last_name: lastName
+                })
+            });
+
+            const data = await response.json();
+
+            if (response.ok && data.success) {
+                successDiv.innerHTML = `
+                    <i class="fas fa-check-circle me-2"></i>
+                    <strong>Account created successfully!</strong><br>
+                    ${data.data.message || 'You can now login to your account.'}
+                `;
+                successDiv.classList.remove('d-none');
+
+                // Clear form
+                document.getElementById('registerForm').reset();
+
+                // Redirect to login after 2 seconds
+                setTimeout(() => {
+                    window.location.href = '/login';
+                }, 2000);
+            } else {
+                errorDiv.textContent = data.message || 'Registration failed. Please try again.';
+                errorDiv.classList.remove('d-none');
+            }
+        } catch (error) {
+            errorDiv.textContent = 'Network error. Please try again.';
+            errorDiv.classList.remove('d-none');
+        } finally {
+            registerBtn.disabled = false;
+            registerBtn.innerHTML = '<i class="fas fa-user-plus me-2"></i>Create Account';
+        }
+    }
+
+    function togglePassword(inputId) {
+        const input = document.getElementById(inputId);
+        const eye = document.getElementById(inputId + 'Eye');
+        if (input.type === 'password') {
+            input.type = 'text';
+            eye.classList.replace('fa-eye', 'fa-eye-slash');
+        } else {
+            input.type = 'password';
+            eye.classList.replace('fa-eye-slash', 'fa-eye');
+        }
+    }
+
+    // Password strength indicator
+    document.getElementById('regPassword').addEventListener('input', function() {
+        const password = this.value;
+        const strengthDiv = document.getElementById('passwordStrength');
+
+        let strength = 0;
+        if (password.length >= 8) strength++;
+        if (/[A-Z]/.test(password)) strength++;
+        if (/[a-z]/.test(password)) strength++;
+        if (/\d/.test(password)) strength++;
+        if (/[!@#$%^&*]/.test(password)) strength++;
+
+        const levels = ['', 'Very Weak', 'Weak', 'Fair', 'Strong', 'Very Strong'];
+        const colors = ['', 'danger', 'danger', 'warning', 'success', 'success'];
+
+        if (password.length > 0) {
+            strengthDiv.innerHTML = `
+                <div class="progress" style="height: 5px;">
+                    <div class="progress-bar bg-${colors[strength]}" style="width: ${strength * 20}%"></div>
+                </div>
+                <small class="text-${colors[strength]}">${levels[strength]}</small>
+            `;
+        } else {
+            strengthDiv.innerHTML = '';
+        }
+    });
+
+    // Redirect if already logged in
+    if (getToken()) {
+        window.location.href = '/';
+    }
+</script>
+{% endblock %}

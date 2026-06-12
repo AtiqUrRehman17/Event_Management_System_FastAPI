@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Email Verification - EventHub</title>
+
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <!-- Font Awesome Icons -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
+
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .verification-card {
+            max-width: 500px;
+            width: 90%;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+            animation: fadeInUp 0.5s ease-out;
+        }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .verification-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 40px 20px;
+            text-align: center;
+            color: white;
+        }
+
+        .verification-header i {
+            font-size: 64px;
+            margin-bottom: 15px;
+        }
+
+        .verification-header h2 {
+            font-weight: 700;
+            margin-bottom: 10px;
+        }
+
+        .verification-body {
+            padding: 40px 30px;
+            text-align: center;
+        }
+
+        .verification-body .status-icon {
+            font-size: 72px;
+            margin-bottom: 20px;
+        }
+
+        .verification-body h3 {
+            font-weight: 600;
+            margin-bottom: 15px;
+        }
+
+        .verification-body p {
+            color: #6c757d;
+            margin-bottom: 25px;
+            line-height: 1.6;
+        }
+
+        .btn-custom {
+            padding: 12px 30px;
+            border-radius: 10px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            margin: 5px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-outline-primary {
+            border: 2px solid #667eea;
+            color: #667eea;
+        }
+
+        .btn-outline-primary:hover {
+            background: #667eea;
+            border-color: #667eea;
+            transform: translateY(-2px);
+        }
+
+        .spinner-border {
+            width: 3rem;
+            height: 3rem;
+        }
+
+        .redirect-countdown {
+            font-size: 14px;
+            color: #6c757d;
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid #e9ecef;
+        }
+
+        .redirect-countdown span {
+            font-weight: 600;
+            color: #667eea;
+            font-size: 18px;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+
+        .pulse {
+            animation: pulse 1s ease-in-out;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="verification-card">
+        <!-- Header -->
+        <div class="verification-header">
+            <i class="fas fa-envelope-open-text"></i>
+            <h2>Email Verification</h2>
+            <p class="mb-0 opacity-75">Confirm your email address</p>
+        </div>
+
+        <!-- Body - Will be populated by JavaScript -->
+        <div class="verification-body" id="verificationContent">
+            <div class="text-center py-4">
+                <div class="spinner-border text-primary" role="status"></div>
+                <p class="text-muted mt-3">Verifying your email address...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Get token from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const token = urlParams.get('token');
+
+        // API base URL
+        const API_BASE = '/api/v1';
+
+        // Function to show success state
+        function showSuccess() {
+            const content = document.getElementById('verificationContent');
+            content.innerHTML = `
+                <div class="status-icon text-success">
+                    <i class="fas fa-check-circle"></i>
+                </div>
+                <h3 class="text-success">Email Verified!</h3>
+                <p>Your email address has been successfully verified.<br>You can now log in to your account.</p>
+                <div class="mt-4">
+                    <a href="/login" class="btn btn-primary btn-custom">
+                        <i class="fas fa-sign-in-alt me-2"></i>Login Now
+                    </a>
+                </div>
+                <div class="redirect-countdown">
+                    <i class="fas fa-hourglass-half me-1"></i>
+                    Redirecting to login in <span id="countdown">5</span> seconds
+                </div>
+            `;
+
+            // Start countdown
+            let seconds = 5;
+            const countdownEl = document.getElementById('countdown');
+            const interval = setInterval(() => {
+                seconds--;
+                if (countdownEl) countdownEl.textContent = seconds;
+                if (seconds <= 0) {
+                    clearInterval(interval);
+                    window.location.href = '/login';
+                }
+            }, 1000);
+        }
+
+        // Function to show error state
+        function showError(message) {
+            const content = document.getElementById('verificationContent');
+            content.innerHTML = `
+                <div class="status-icon text-danger">
+                    <i class="fas fa-exclamation-circle"></i>
+                </div>
+                <h3 class="text-danger">Verification Failed</h3>
+                <p>${message || 'The verification link is invalid or has expired.'}</p>
+                <div class="mt-4">
+                    <a href="/resend-verification" class="btn btn-primary btn-custom">
+                        <i class="fas fa-paper-plane me-2"></i>Resend Verification Email
+                    </a>
+                    <a href="/login" class="btn btn-outline-primary btn-custom">
+                        <i class="fas fa-sign-in-alt me-2"></i>Go to Login
+                    </a>
+                </div>
+            `;
+        }
+
+        // Function to show already verified state
+        function showAlreadyVerified() {
+            const content = document.getElementById('verificationContent');
+            content.innerHTML = `
+                <div class="status-icon text-warning">
+                    <i class="fas fa-info-circle"></i>
+                </div>
+                <h3 class="text-warning">Already Verified</h3>
+                <p>Your email address has already been verified.<br>You can proceed to login.</p>
+                <div class="mt-4">
+                    <a href="/login" class="btn btn-primary btn-custom">
+                        <i class="fas fa-sign-in-alt me-2"></i>Login Now
+                    </a>
+                </div>
+                <div class="redirect-countdown">
+                    <i class="fas fa-hourglass-half me-1"></i>
+                    Redirecting to login in <span id="countdown">3</span> seconds
+                </div>
+            `;
+
+            // Start countdown
+            let seconds = 3;
+            const countdownEl = document.getElementById('countdown');
+            const interval = setInterval(() => {
+                seconds--;
+                if (countdownEl) countdownEl.textContent = seconds;
+                if (seconds <= 0) {
+                    clearInterval(interval);
+                    window.location.href = '/login';
+                }
+            }, 1000);
+        }
+
+        // Function to show expired state
+        function showExpired() {
+            const content = document.getElementById('verificationContent');
+            content.innerHTML = `
+                <div class="status-icon text-danger">
+                    <i class="fas fa-clock"></i>
+                </div>
+                <h3 class="text-danger">Link Expired</h3>
+                <p>The verification link has expired. Please request a new verification email.</p>
+                <div class="mt-4">
+                    <form id="resendForm" style="display: inline;">
+                        <input type="hidden" id="resendEmail" value="">
+                        <button type="submit" class="btn btn-primary btn-custom">
+                            <i class="fas fa-paper-plane me-2"></i>Resend Verification Email
+                        </button>
+                    </form>
+                    <a href="/login" class="btn btn-outline-primary btn-custom">
+                        <i class="fas fa-sign-in-alt me-2"></i>Go to Login
+                    </a>
+                </div>
+            `;
+        }
+
+        // Function to show invalid token state
+        function showInvalidToken() {
+            const content = document.getElementById('verificationContent');
+            content.innerHTML = `
+                <div class="status-icon text-danger">
+                    <i class="fas fa-ban"></i>
+                </div>
+                <h3 class="text-danger">Invalid Link</h3>
+                <p>The verification link is invalid. Please check your email for the correct link or request a new one.</p>
+                <div class="mt-4">
+                    <a href="/login" class="btn btn-primary btn-custom">
+                        <i class="fas fa-sign-in-alt me-2"></i>Go to Login
+                    </a>
+                    <a href="/register" class="btn btn-outline-primary btn-custom">
+                        <i class="fas fa-user-plus me-2"></i>Register New Account
+                    </a>
+                </div>
+            `;
+        }
+
+        // Main verification function
+        async function verifyEmail() {
+            if (!token) {
+                showInvalidToken();
+                return;
+            }
+
+            try {
+                // Call the verification API
+                const response = await fetch(`${API_BASE}/auth/verify-email`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ token: token })
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.success) {
+                    if (data.data.is_verified) {
+                        if (data.data.message === 'Email already verified') {
+                            showAlreadyVerified();
+                        } else {
+                            showSuccess();
+                        }
+                    } else {
+                        showError('Verification failed. Please try again.');
+                    }
+                } else {
+                    // Check error code for specific messages
+                    const errorCode = data.error_code;
+                    if (errorCode === 'TOKEN_EXPIRED') {
+                        showExpired();
+                    } else if (errorCode === 'INVALID_TOKEN') {
+                        showInvalidToken();
+                    } else {
+                        showError(data.message || 'Verification failed. Please try again.');
+                    }
+                }
+            } catch (error) {
+                console.error('Verification error:', error);
+                showError('Network error. Please check your connection and try again.');
+            }
+        }
+
+        // Handle resend verification form
+        function setupResendForm() {
+            const resendForm = document.getElementById('resendForm');
+            if (resendForm) {
+                resendForm.addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    
+                    const email = prompt('Please enter your email address to receive a new verification link:');
+                    if (!email) return;
+                    
+                    const button = resendForm.querySelector('button');
+                    const originalText = button.innerHTML;
+                    button.disabled = true;
+                    button.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Sending...';
+                    
+                    try {
+                        const response = await fetch(`${API_BASE}/auth/resend-verification`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({ email: email })
+                        });
+                        
+                        const data = await response.json();
+                        
+                        if (response.ok && data.success) {
+                            alert('Verification email sent! Please check your inbox.');
+                        } else {
+                            alert(data.message || 'Failed to send verification email. Please try again.');
+                        }
+                    } catch (error) {
+                        alert('Network error. Please try again.');
+                    } finally {
+                        button.disabled = false;
+                        button.innerHTML = originalText;
+                    }
+                });
+            }
+        }
+
+        // Start verification when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            verifyEmail();
+            setupResendForm();
+        });
+    </script>
+</body>
+</html>

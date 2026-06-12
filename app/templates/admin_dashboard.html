@@ -1,0 +1,278 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Dashboard - EventHub{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+
+    <h2 class="fw-bold mb-4"><i class="fas fa-tachometer-alt me-2"></i>Admin Dashboard</h2>
+
+    <!-- Stats Cards -->
+    <div class="row g-3 mb-4">
+        <div class="col-xl-3 col-md-6">
+            <div class="card border-0 shadow-sm border-start border-4 border-primary">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <small class="text-muted text-uppercase">Total Users</small>
+                            <h3 class="fw-bold" id="dashTotalUsers">-</h3>
+                        </div>
+                        <i class="fas fa-users fa-2x text-primary opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <div class="card border-0 shadow-sm border-start border-4 border-success">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <small class="text-muted text-uppercase">Total Events</small>
+                            <h3 class="fw-bold" id="dashTotalEvents">-</h3>
+                        </div>
+                        <i class="fas fa-calendar fa-2x text-success opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <div class="card border-0 shadow-sm border-start border-4 border-warning">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <small class="text-muted text-uppercase">Total Bookings</small>
+                            <h3 class="fw-bold" id="dashTotalBookings">-</h3>
+                        </div>
+                        <i class="fas fa-ticket-alt fa-2x text-warning opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <div class="card border-0 shadow-sm border-start border-4 border-danger">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <small class="text-muted text-uppercase">Total Revenue</small>
+                            <h3 class="fw-bold" id="dashTotalRevenue">-</h3>
+                        </div>
+                        <i class="fas fa-dollar-sign fa-2x text-danger opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Second Row Stats -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-3 col-6">
+            <div class="card border-0 shadow-sm text-center">
+                <div class="card-body py-3">
+                    <small class="text-muted">Upcoming Events</small>
+                    <h4 class="fw-bold text-primary" id="dashUpcoming">-</h4>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 col-6">
+            <div class="card border-0 shadow-sm text-center">
+                <div class="card-body py-3">
+                    <small class="text-muted">Active Bookings</small>
+                    <h4 class="fw-bold text-success" id="dashActiveBookings">-</h4>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 col-6">
+            <div class="card border-0 shadow-sm text-center">
+                <div class="card-body py-3">
+                    <small class="text-muted">Revenue This Month</small>
+                    <h4 class="fw-bold text-warning" id="dashMonthRevenue">-</h4>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 col-6">
+            <div class="card border-0 shadow-sm text-center">
+                <div class="card-body py-3">
+                    <small class="text-muted">New Users Today</small>
+                    <h4 class="fw-bold text-info" id="dashNewUsers">-</h4>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <!-- Recent Bookings -->
+        <div class="col-lg-7">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white border-0 py-3">
+                    <h5 class="fw-bold mb-0"><i class="fas fa-clock me-2"></i>Recent Bookings</h5>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>User</th>
+                                    <th>Event</th>
+                                    <th>Seats</th>
+                                    <th>Price</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="recentBookingsTable">
+                                <tr>
+                                    <td colspan="5" class="text-center py-4">
+                                        <div class="spinner-border spinner-border-sm text-primary"></div>
+                                        Loading...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Top Events & Recent Users -->
+        <div class="col-lg-5">
+            <!-- Top Events -->
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-header bg-white border-0 py-3">
+                    <h5 class="fw-bold mb-0"><i class="fas fa-trophy me-2"></i>Top Events</h5>
+                </div>
+                <div class="card-body" id="topEventsContainer">
+                    <div class="text-center py-3">
+                        <div class="spinner-border spinner-border-sm text-primary"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recent Users -->
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white border-0 py-3">
+                    <h5 class="fw-bold mb-0"><i class="fas fa-user-plus me-2"></i>Recent Users</h5>
+                </div>
+                <div class="card-body" id="recentUsersContainer">
+                    <div class="text-center py-3">
+                        <div class="spinner-border spinner-border-sm text-primary"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const token = getToken();
+        const user = JSON.parse(localStorage.getItem('user') || '{}');
+
+        if (!token || user.role !== 'admin') {
+            window.location.href = '/login';
+            return;
+        }
+
+        loadDashboard();
+    });
+
+    async function loadDashboard() {
+        try {
+            const response = await apiCall('/api/v1/admin/dashboard/stats');
+            if (response.success) {
+                const data = response.data;
+
+                // Main stats
+                document.getElementById('dashTotalUsers').textContent = data.total_users || 0;
+                document.getElementById('dashTotalEvents').textContent = data.total_events || 0;
+                document.getElementById('dashTotalBookings').textContent = data.total_bookings || 0;
+                document.getElementById('dashTotalRevenue').textContent = `$${(data.total_revenue || 0).toFixed(2)}`;
+
+                // Second row
+                document.getElementById('dashUpcoming').textContent = data.upcoming_events || 0;
+                document.getElementById('dashActiveBookings').textContent = data.active_bookings || 0;
+                document.getElementById('dashMonthRevenue').textContent = `$${(data.revenue_this_month || 0).toFixed(2)}`;
+                document.getElementById('dashNewUsers').textContent = data.new_users_today || 0;
+
+                // Recent bookings
+                renderRecentBookings(data.recent_bookings || []);
+
+                // Top events
+                renderTopEvents(data.top_events || []);
+
+                // Recent users
+                renderRecentUsers(data.recent_users || []);
+            }
+        } catch (e) {
+            showAlert('Failed to load dashboard data.', 'danger');
+        }
+    }
+
+    function renderRecentBookings(bookings) {
+        const tbody = document.getElementById('recentBookingsTable');
+        if (!bookings.length) {
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">No recent bookings</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = bookings.slice(0, 8).map(b => `
+            <tr>
+                <td>
+                    <small class="fw-semibold">${b.user_name || b.username}</small>
+                </td>
+                <td><small>${b.event_title || 'N/A'}</small></td>
+                <td><small>${b.seats || b.number_of_seats || 0}</small></td>
+                <td><small class="fw-semibold">$${(b.total_price || 0).toFixed(2)}</small></td>
+                <td>
+                    <span class="badge ${b.status === 'active' ? 'bg-success' : 'bg-danger'} badge-sm">
+                        ${b.status}
+                    </span>
+                </td>
+            </tr>
+        `).join('');
+    }
+
+    function renderTopEvents(events) {
+        const container = document.getElementById('topEventsContainer');
+        if (!events.length) {
+            container.innerHTML = '<p class="text-muted text-center">No events data</p>';
+            return;
+        }
+
+        container.innerHTML = events.slice(0, 5).map((e, i) => `
+            <div class="d-flex justify-content-between align-items-center ${i > 0 ? 'mt-3 pt-3 border-top' : ''}">
+                <div>
+                    <h6 class="mb-0 fw-semibold">${e.title}</h6>
+                    <small class="text-muted">${e.category || 'General'} • ${e.booking_count || 0} bookings</small>
+                </div>
+                <div class="text-end">
+                    <div class="fw-bold text-primary">$${(e.revenue || 0).toFixed(2)}</div>
+                    <small class="text-muted">${(e.fill_rate || 0).toFixed(0)}% filled</small>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    function renderRecentUsers(users) {
+        const container = document.getElementById('recentUsersContainer');
+        if (!users.length) {
+            container.innerHTML = '<p class="text-muted text-center">No recent users</p>';
+            return;
+        }
+
+        container.innerHTML = users.slice(0, 5).map((u, i) => `
+            <div class="d-flex justify-content-between align-items-center ${i > 0 ? 'mt-3 pt-3 border-top' : ''}">
+                <div>
+                    <h6 class="mb-0 fw-semibold">${u.full_name || u.username}</h6>
+                    <small class="text-muted">${u.email}</small>
+                </div>
+                <div class="text-end">
+                    <span class="badge ${u.role === 'admin' ? 'bg-danger' : 'bg-primary'}">${u.role}</span>
+                    <div><small class="text-muted">${u.booking_count || 0} bookings</small></div>
+                </div>
+            </div>
+        `).join('');
+    }
+</script>
+{% endblock %}

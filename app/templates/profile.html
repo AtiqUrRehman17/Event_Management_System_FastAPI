@@ -1,0 +1,292 @@
+{% extends "base.html" %}
+
+{% block title %}My Profile - EventHub{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+
+    <h2 class="fw-bold mb-4"><i class="fas fa-user-circle me-2"></i>My Profile</h2>
+
+    <div class="row g-4">
+        <!-- Profile Info Card -->
+        <div class="col-md-4">
+            <div class="card border-0 shadow-sm text-center">
+                <div class="card-body p-4">
+                    <div class="mb-3">
+                        <div class="rounded-circle bg-primary d-inline-flex align-items-center justify-content-center"
+                             style="width: 100px; height: 100px;" id="avatarContainer">
+                            <i class="fas fa-user fa-3x text-white"></i>
+                        </div>
+                    </div>
+                    <h4 class="fw-bold" id="profileFullName">Loading...</h4>
+                    <p class="text-muted" id="profileUsername">@username</p>
+                    <span class="badge bg-primary" id="profileRole">User</span>
+                    <span class="badge bg-success ms-1" id="profileStatus">Active</span>
+                    <hr>
+                    <div class="text-start">
+                        <p class="mb-2">
+                            <i class="fas fa-envelope me-2 text-muted"></i>
+                            <span id="profileEmail">email@example.com</span>
+                        </p>
+                        <p class="mb-2">
+                            <i class="fas fa-phone me-2 text-muted"></i>
+                            <span id="profilePhone">Not set</span>
+                        </p>
+                        <p class="mb-2">
+                            <i class="fas fa-globe me-2 text-muted"></i>
+                            <span id="profileTimezone">UTC</span>
+                        </p>
+                        <p class="mb-0">
+                            <i class="fas fa-calendar-plus me-2 text-muted"></i>
+                            Joined <span id="profileJoined">-</span>
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Edit Profile Form -->
+        <div class="col-md-8">
+            <!-- Edit Profile -->
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-header bg-white border-0 py-3">
+                    <h5 class="fw-bold mb-0"><i class="fas fa-edit me-2"></i>Edit Profile</h5>
+                </div>
+                <div class="card-body p-4">
+                    <form id="profileForm" onsubmit="updateProfile(event)">
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label for="editFirstName" class="form-label fw-semibold">First Name</label>
+                                <input type="text" class="form-control" id="editFirstName"
+                                       required minlength="2">
+                            </div>
+                            <div class="col-md-6">
+                                <label for="editLastName" class="form-label fw-semibold">Last Name</label>
+                                <input type="text" class="form-control" id="editLastName"
+                                       required minlength="2">
+                            </div>
+                            <div class="col-md-6">
+                                <label for="editEmail" class="form-label fw-semibold">Email</label>
+                                <input type="email" class="form-control" id="editEmail" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="editPhone" class="form-label fw-semibold">Phone</label>
+                                <input type="text" class="form-control" id="editPhone"
+                                       placeholder="+1234567890">
+                            </div>
+                            <div class="col-md-6">
+                                <label for="editTimezone" class="form-label fw-semibold">Timezone</label>
+                                <select class="form-select" id="editTimezone">
+                                    <option value="UTC">UTC</option>
+                                    <option value="America/New_York">Eastern Time</option>
+                                    <option value="America/Chicago">Central Time</option>
+                                    <option value="America/Denver">Mountain Time</option>
+                                    <option value="America/Los_Angeles">Pacific Time</option>
+                                    <option value="Europe/London">London</option>
+                                    <option value="Europe/Paris">Paris</option>
+                                    <option value="Asia/Tokyo">Tokyo</option>
+                                    <option value="Asia/Kolkata">India</option>
+                                </select>
+                            </div>
+                            <div class="col-12">
+                                <label for="editBio" class="form-label fw-semibold">Bio</label>
+                                <textarea class="form-control" id="editBio" rows="3"
+                                          placeholder="Tell us about yourself..." maxlength="500"></textarea>
+                            </div>
+                        </div>
+
+                        <div class="alert alert-danger d-none mt-3" id="profileError"></div>
+                        <div class="alert alert-success d-none mt-3" id="profileSuccess"></div>
+
+                        <button type="submit" class="btn btn-primary mt-3" id="updateProfileBtn">
+                            <i class="fas fa-save me-2"></i>Save Changes
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Change Password -->
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white border-0 py-3">
+                    <h5 class="fw-bold mb-0"><i class="fas fa-lock me-2"></i>Change Password</h5>
+                </div>
+                <div class="card-body p-4">
+                    <form id="passwordForm" onsubmit="changePassword(event)">
+                        <div class="row g-3">
+                            <div class="col-md-12">
+                                <label for="currentPassword" class="form-label fw-semibold">Current Password</label>
+                                <input type="password" class="form-control" id="currentPassword" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="newPassword" class="form-label fw-semibold">New Password</label>
+                                <input type="password" class="form-control" id="newPassword"
+                                       required minlength="8">
+                            </div>
+                            <div class="col-md-6">
+                                <label for="confirmNewPassword" class="form-label fw-semibold">Confirm New Password</label>
+                                <input type="password" class="form-control" id="confirmNewPassword"
+                                       required minlength="8">
+                            </div>
+                        </div>
+
+                        <div class="alert alert-danger d-none mt-3" id="passwordError"></div>
+                        <div class="alert alert-success d-none mt-3" id="passwordSuccess"></div>
+
+                        <button type="submit" class="btn btn-warning mt-3" id="changePasswordBtn">
+                            <i class="fas fa-key me-2"></i>Change Password
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        if (!getToken()) {
+            window.location.href = '/login';
+            return;
+        }
+        loadProfile();
+    });
+
+    async function loadProfile() {
+        try {
+            const response = await apiCall('/api/v1/users/me');
+            if (response.success) {
+                const user = response.data;
+
+                // Profile card
+                document.getElementById('profileFullName').textContent = `${user.first_name} ${user.last_name}`;
+                document.getElementById('profileUsername').textContent = `@${user.username}`;
+                document.getElementById('profileEmail').textContent = user.email;
+                document.getElementById('profilePhone').textContent = user.phone || 'Not set';
+                document.getElementById('profileTimezone').textContent = user.timezone || 'UTC';
+                document.getElementById('profileRole').textContent = user.role.charAt(0).toUpperCase() + user.role.slice(1);
+                document.getElementById('profileJoined').textContent = formatDate(user.created_at);
+
+                if (user.profile_picture) {
+                    document.getElementById('avatarContainer').innerHTML =
+                        `<img src="${user.profile_picture}" class="rounded-circle" style="width:100px;height:100px;object-fit:cover;">`;
+                }
+
+                // Edit form
+                document.getElementById('editFirstName').value = user.first_name || '';
+                document.getElementById('editLastName').value = user.last_name || '';
+                document.getElementById('editEmail').value = user.email || '';
+                document.getElementById('editPhone').value = user.phone || '';
+                document.getElementById('editBio').value = user.bio || '';
+                document.getElementById('editTimezone').value = user.timezone || 'UTC';
+            }
+        } catch (e) {
+            showAlert('Failed to load profile.', 'danger');
+        }
+    }
+
+    async function updateProfile(event) {
+        event.preventDefault();
+
+        const btn = document.getElementById('updateProfileBtn');
+        const errorDiv = document.getElementById('profileError');
+        const successDiv = document.getElementById('profileSuccess');
+
+        errorDiv.classList.add('d-none');
+        successDiv.classList.add('d-none');
+
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Saving...';
+
+        const data = {
+            first_name: document.getElementById('editFirstName').value.trim(),
+            last_name: document.getElementById('editLastName').value.trim(),
+            email: document.getElementById('editEmail').value.trim(),
+            phone: document.getElementById('editPhone').value.trim() || null,
+            bio: document.getElementById('editBio').value.trim() || null,
+            timezone: document.getElementById('editTimezone').value
+        };
+
+        try {
+            const response = await apiCall('/api/v1/users/me', {
+                method: 'PUT',
+                body: JSON.stringify(data)
+            });
+
+            if (response.success) {
+                successDiv.textContent = 'Profile updated successfully!';
+                successDiv.classList.remove('d-none');
+                loadProfile();
+
+                // Update stored user data
+                const user = JSON.parse(localStorage.getItem('user') || '{}');
+                user.first_name = data.first_name;
+                user.last_name = data.last_name;
+                localStorage.setItem('user', JSON.stringify(user));
+                checkAuthStatus();
+            } else {
+                errorDiv.textContent = response.message || 'Failed to update profile.';
+                errorDiv.classList.remove('d-none');
+            }
+        } catch (e) {
+            errorDiv.textContent = 'Error updating profile.';
+            errorDiv.classList.remove('d-none');
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-save me-2"></i>Save Changes';
+        }
+    }
+
+    async function changePassword(event) {
+        event.preventDefault();
+
+        const btn = document.getElementById('changePasswordBtn');
+        const errorDiv = document.getElementById('passwordError');
+        const successDiv = document.getElementById('passwordSuccess');
+
+        errorDiv.classList.add('d-none');
+        successDiv.classList.add('d-none');
+
+        const currentPassword = document.getElementById('currentPassword').value;
+        const newPassword = document.getElementById('newPassword').value;
+        const confirmPassword = document.getElementById('confirmNewPassword').value;
+
+        if (newPassword !== confirmPassword) {
+            errorDiv.textContent = 'New passwords do not match.';
+            errorDiv.classList.remove('d-none');
+            return;
+        }
+
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Changing...';
+
+        try {
+            const response = await apiCall('/api/v1/users/me/change-password', {
+                method: 'POST',
+                body: JSON.stringify({
+                    current_password: currentPassword,
+                    new_password: newPassword,
+                    confirm_password: confirmPassword
+                })
+            });
+
+            if (response.success) {
+                successDiv.textContent = 'Password changed successfully!';
+                successDiv.classList.remove('d-none');
+                document.getElementById('passwordForm').reset();
+            } else {
+                errorDiv.textContent = response.message || 'Failed to change password.';
+                errorDiv.classList.remove('d-none');
+            }
+        } catch (e) {
+            errorDiv.textContent = 'Error changing password.';
+            errorDiv.classList.remove('d-none');
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-key me-2"></i>Change Password';
+        }
+    }
+</script>
+{% endblock %}

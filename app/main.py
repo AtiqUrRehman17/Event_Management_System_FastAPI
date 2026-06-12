@@ -1,7 +1,7 @@
 import warnings
 warnings.filterwarnings("ignore")
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 from fastapi.staticfiles import StaticFiles
@@ -29,6 +29,7 @@ from app.routers import (
     audit_router,
     upload_router,
 )
+from app.routerss.views import router as views_router
 from app.utils import register_error_handlers
 from app.services.event_service import EventService
 from app.services.auth_service import AuthService
@@ -46,9 +47,14 @@ Base.metadata.create_all(bind=engine)
 # Create upload directories if they don't exist
 uploads_dir = Path("uploads")
 uploads_dir.mkdir(exist_ok=True)
-
 for subdir in ["events", "categories", "avatars"]:
     (uploads_dir / subdir).mkdir(exist_ok=True)
+
+# Create static directories if they don't exist
+static_dir = Path("app/static")
+static_dir.mkdir(exist_ok=True)
+(static_dir / "css").mkdir(exist_ok=True)
+(static_dir / "js").mkdir(exist_ok=True)
 
 
 def run_event_status_update():
@@ -96,22 +102,22 @@ def run_cleanup_verification_tokens():
     try:
         from app.utils.datetime_utils import get_current_utc
         now = get_current_utc()
-        
+
         expired = db.query(EmailVerificationToken).filter(
             EmailVerificationToken.expires_at < now
         ).all()
-        
+
         one_day_ago = now - timedelta(hours=24)
         used_old = db.query(EmailVerificationToken).filter(
             EmailVerificationToken.is_used == True,
             EmailVerificationToken.created_at < one_day_ago
         ).all()
-        
+
         total = len(expired) + len(used_old)
-        
+
         for token in expired + used_old:
             db.delete(token)
-        
+
         if total > 0:
             db.commit()
             logger.info(f"Scheduler: Cleaned up {total} expired/used verification token(s)")
@@ -140,7 +146,6 @@ async def lifespan(app: FastAPI):
     # ---- STARTUP ----
     logger.info("Starting Event Management System...")
 
-    # Step 1: Seed database (admin, categories, sample events)
     logger.info("Seeding database...")
     db = SessionLocal()
     try:
@@ -150,11 +155,9 @@ async def lifespan(app: FastAPI):
     finally:
         db.close()
 
-    # Step 2: Run initial event status update
     logger.info("Running initial event status update...")
     run_event_status_update()
 
-    # Step 3: Start background scheduler
     scheduler = BackgroundScheduler()
 
     scheduler.add_job(
@@ -164,7 +167,6 @@ async def lifespan(app: FastAPI):
         name="Auto update event statuses",
         replace_existing=True
     )
-
     scheduler.add_job(
         run_cleanup_expired_tokens,
         trigger=IntervalTrigger(hours=24),
@@ -172,7 +174,6 @@ async def lifespan(app: FastAPI):
         name="Clean up expired blacklisted tokens",
         replace_existing=True
     )
-
     scheduler.add_job(
         run_cleanup_reset_tokens,
         trigger=IntervalTrigger(hours=12),
@@ -180,7 +181,6 @@ async def lifespan(app: FastAPI):
         name="Clean up expired reset tokens",
         replace_existing=True
     )
-
     scheduler.add_job(
         run_cleanup_verification_tokens,
         trigger=IntervalTrigger(hours=24),
@@ -188,7 +188,6 @@ async def lifespan(app: FastAPI):
         name="Clean up expired verification tokens",
         replace_existing=True
     )
-
     scheduler.add_job(
         run_cleanup_expired_waitlist,
         trigger=IntervalTrigger(hours=1),
@@ -218,16 +217,43 @@ app = FastAPI(
     docs_url="/docs" if settings.DEBUG else None,
     redoc_url="/redoc" if settings.DEBUG else None,
     swagger_ui_parameters={
-        "persistAuthorization": True,  # Tokens persist across page refreshes
+        "persistAuthorization": True,
         "displayRequestDuration": True,
         "filter": True,
     }
 )
 
-# Mount static files for uploads
+# CORS middleware - add BEFORE anything else
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://127.0.0.1:8000/"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# ── Mount static files FIRST ──
+app.mount("/static", StaticFiles(directory="app/static"), name="static")
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
-# Register error handlers
+# ── Include UI views router (no prefix) ──
+app.include_router(views_router)
+
+# ── Include API routers ──
+app.include_router(auth_router, prefix=settings.API_PREFIX)
+app.include_router(users_router, prefix=settings.API_PREFIX)
+app.include_router(categories_router, prefix=settings.API_PREFIX)
+app.include_router(events_router, prefix=settings.API_PREFIX)
+app.include_router(bookings_router, prefix=settings.API_PREFIX)
+app.include_router(oauth_router, prefix=settings.API_PREFIX)
+app.include_router(invoice_router, prefix=settings.API_PREFIX)
+app.include_router(waitlist_router, prefix=settings.API_PREFIX)
+app.include_router(notifications_router, prefix=settings.API_PREFIX)
+app.include_router(admin_router, prefix=settings.API_PREFIX)
+app.include_router(audit_router, prefix=settings.API_PREFIX)
+app.include_router(upload_router, prefix=settings.API_PREFIX)
+
+# ── Register error handlers AFTER all routers ──
 register_error_handlers(app)
 
 
@@ -243,7 +269,6 @@ def custom_openapi():
         routes=app.routes,
     )
 
-    # Add security scheme
     openapi_schema["components"] = openapi_schema.get("components", {})
     openapi_schema["components"]["securitySchemes"] = {
         "BearerAuth": {
@@ -260,43 +285,8 @@ def custom_openapi():
 
 app.openapi = custom_openapi
 
-# CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
-
-# Health endpoints
+# Health check endpoint
 @app.get("/health", tags=["Health"])
 async def health_check():
     return {"status": "healthy"}
-
-
-@app.get("/", tags=["Health"])
-async def root():
-    return {
-        "message": f"Welcome to {settings.APP_NAME}",
-        "version": settings.APP_VERSION,
-        "status": "running",
-        "docs": "/docs",
-        "redoc": "/redoc"
-    }
-
-
-# Include API routers (all under /api/v1 prefix)
-app.include_router(auth_router, prefix=settings.API_PREFIX)
-app.include_router(users_router, prefix=settings.API_PREFIX)
-app.include_router(categories_router, prefix=settings.API_PREFIX)
-app.include_router(events_router, prefix=settings.API_PREFIX)
-app.include_router(bookings_router, prefix=settings.API_PREFIX)
-app.include_router(oauth_router, prefix=settings.API_PREFIX)
-app.include_router(invoice_router, prefix=settings.API_PREFIX)
-app.include_router(waitlist_router, prefix=settings.API_PREFIX)
-app.include_router(notifications_router, prefix=settings.API_PREFIX)
-app.include_router(admin_router, prefix=settings.API_PREFIX)
-app.include_router(audit_router, prefix=settings.API_PREFIX)
-app.include_router(upload_router, prefix=settings.API_PREFIX)

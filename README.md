@@ -245,6 +245,54 @@ event-management-system/
 │       ├── validators.py                # Input validation functions
 │       ├── datetime_utils.py            # Datetime utilities
 │       └── image_upload.py              # Image upload utilities
+│   ├── templates/                    # HTML templates
+│   │   ├── admin_dashboard.html      # Admin dashboard page
+│   │   ├── base.html                 # Base template (navigation, footer)
+│   │   ├── event_details.html        # Single event details page
+│   │   ├── event.html                # Events listing page
+│   │   ├── home.html                 # Homepage
+│   │   ├── login.html                # Login page
+│   │   ├── profile.html              # User profile page
+│   │   ├── register.html             # Registration page
+│   │   └── bookings.html             # User bookings page
+│   │
+│   └── static/                       # Static assets
+│       ├── css/
+│       │   └── style.css             # Main stylesheet
+│       └── js/
+│           └── main.js               # JavaScript for frontend
+tests/
+├── __init__.py
+├── conftest.py                         # Shared fixtures and configuration
+│
+├── unit/                               # Unit tests (isolated functions)
+│   ├── __init__.py
+│   ├── test_auth_utils.py              # Password hashing & verification
+│   ├── test_datetime_utils.py          # Datetime helper functions
+│   ├── test_pagination.py              # Pagination logic
+│   ├── test_response.py                # API response formatters
+│   ├── test_security.py                # JWT token functions
+│   └── test_validator.py               # Input validation functions
+│
+├── integration/                        # Integration tests (API endpoints)
+│   ├── __init__.py
+│   ├── test_admin.py                   # Admin dashboard endpoints
+│   ├── test_audit.py                   # Audit log endpoints
+│   ├── test_auth.py                    # Authentication endpoints
+│   ├── test_categories.py              # Category CRUD endpoints
+│   ├── test_bookings.py                # Booking endpoints
+│   ├── test_events.py                  # Event CRUD endpoints
+│   ├── test_invoices.py                # Invoice endpoints
+│   ├── test_notifications.py           # Notification endpoints
+│   ├── test_users.py                   # User management endpoints
+│   └── test_waitlist.py                # Waitlist endpoints
+│
+└── fixtures/                           # Test data fixtures
+    ├── __init__.py
+    ├── booking_fixtures.py             # Booking test data
+    ├── category_fixtures.py            # Category test data
+    ├── events_fixtures.py              # Event test data
+    └── users_fixtures.py               # User test data
 │
 ├── alembic/                             # Database migrations
 │   ├── versions/
@@ -278,6 +326,21 @@ event-management-system/
 
 ---
 
+## Automated Tests
+Perfored a detailed Automated test using Pytest
+
+Unit testin
+
+Integartion
+
+Fixtures
+
+-------------
+## Interactive UI
+
+Interative UI Using jinja templates , Html.
+
+-------------------
 ## Installation
 
 ### Step 1: Clone the Repository

@@ -39,19 +39,22 @@ class Settings(BaseSettings):
     EMAIL_USE_TLS: bool = True
     EMAIL_HOST_USER: str = ""
     EMAIL_HOST_PASSWORD: str = ""
-    POSTMARK_API_TOKEN: Optional[str] = None
     EMAIL_PROVIDER: str = "smtp"
 
-    UPLOAD_DIR: str = "uploads"
-    MAX_IMAGE_SIZE_MB: int = 5
-    ALLOWED_IMAGE_EXTENSIONS: list = [".jpg", ".jpeg", ".png", ".gif", ".webp"]
+    # Frontend URL for email links
+    FRONTEND_URL: str = "http://localhost:8000"
 
     # Reset Token Configuration
     RESET_TOKEN_EXPIRE_MINUTES: int = 30
 
     # Email Verification Configuration
-    VERIFICATION_TOKEN_EXPIRE_MINUTES: int = 1440
+    VERIFICATION_TOKEN_EXPIRE_MINUTES: int = 1440  # 24 hours
     REQUIRE_EMAIL_VERIFICATION: bool = True
+
+    # Image Upload Configuration
+    UPLOAD_DIR: str = "uploads"
+    MAX_IMAGE_SIZE_MB: int = 5
+    ALLOWED_IMAGE_EXTENSIONS: list = [".jpg", ".jpeg", ".png", ".gif", ".webp"]
 
     # Google OAuth Configuration
     GOOGLE_CLIENT_ID: str = ""
