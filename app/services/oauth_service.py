@@ -11,6 +11,8 @@ from app.utils.auth_utils import hash_password
 from app.utils.datetime_utils import get_current_utc
 from app.core.security import Security
 import logging
+# Import re module for username generation
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -191,5 +193,3 @@ class GoogleOAuthService:
         return user, is_new_user
 
 
-# Import re module for username generation
-import re
