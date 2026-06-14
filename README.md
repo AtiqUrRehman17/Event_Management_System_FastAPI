@@ -1,6 +1,6 @@
 # Event Management System
 
-A comprehensive Event Management System built with **FastAPI**, featuring JWT authentication, OAuth integrations (Google, LinkedIn & Facebook), role-based access control, email verification, password reset, booking management, waitlist functionality, invoice generation, notifications, admin dashboard, audit logs, and more.
+A comprehensive Event Management System built with **FastAPI**, featuring JWT authentication, OAuth integrations (Google, LinkedIn & Facebook), role-based access control, email verification, password reset, booking management, waitlist functionality, invoice generation, notifications, admin dashboard, audit logs, and a complete server-side rendered frontend using Jinja2 templates.
 
 ---
 
@@ -9,6 +9,7 @@ A comprehensive Event Management System built with **FastAPI**, featuring JWT au
 - [Features](#features)
 - [Tech Stack](#tech-stack)
 - [Project Structure](#project-structure)
+- [Frontend Architecture](#frontend-architecture)
 - [Prerequisites](#prerequisites)
 - [Installation](#installation)
 - [Database Migrations](#database-migrations)
@@ -17,6 +18,7 @@ A comprehensive Event Management System built with **FastAPI**, featuring JWT au
 - [Background Jobs](#background-jobs)
 - [Security Features](#security-features)
 - [Error Responses](#error-responses)
+- [Pagination](#pagination)
 - [Testing](#testing)
 - [Troubleshooting](#troubleshooting)
 
@@ -314,6 +316,205 @@ tests/
 
 ---
 
+## Frontend Architecture
+
+The project includes a complete **server-side rendered (SSR) frontend** built with **Jinja2 templates**, **Bootstrap 5**, and **Vanilla JavaScript**. The frontend communicates with the FastAPI backend via REST API calls.
+
+### Frontend Technology Stack
+
+| Technology | Version | Purpose |
+|------------|---------|---------|
+| Jinja2 | 3.1.2 | Server-side template engine |
+| Bootstrap | 5.3.2 | CSS framework (via CDN) |
+| Font Awesome | 6.5.1 | Icon library (via CDN) |
+| Google Fonts | — | Inter font family (via CDN) |
+| Vanilla JavaScript | ES6+ | Client-side logic (no build step) |
+
+### Template Structure (`app/templates/`)
+
+```
+templates/
+├── base.html                 # Base layout with navbar, footer, auth state
+├── home.html                 # Landing page with hero, stats, categories, featured events
+├── events.html               # Events listing with search, filters, pagination
+├── event_detail.html         # Single event view with booking sidebar
+├── login.html                # Login page with OAuth buttons
+├── register.html             # Registration page with password strength meter
+├── profile.html              # User profile management (avatar, password, info)
+├── my_bookings.html          # User's bookings with tabs (All/Active/Cancelled)
+├── admin_dashboard.html      # Admin dashboard with stats, charts, recent activity
+├── verify_email.html         # Email verification page
+└── errors/
+    └── 404.html              # Custom 404 error page
+```
+
+### Static Assets (`app/static/`)
+
+```
+static/
+├── css/
+│   └── style.css             # Custom styles (538 lines) extending Bootstrap
+└── js/
+    └── main.js               # Core JavaScript module (386 lines)
+```
+
+### Core JavaScript Module (`app/static/js/main.js`)
+
+The `main.js` file provides a complete client-side application framework:
+
+#### Authentication & Token Management
+- **Token Storage**: Access/refresh tokens stored in `localStorage`
+- **Auto-refresh**: Automatic token refresh on 401 responses
+- **Auth State**: `checkAuthStatus()` updates navbar UI based on login state
+- **Logout**: Secure logout with server-side token blacklisting
+
+#### API Communication Layer
+- **`apiCall(url, options)`**: Unified fetch wrapper with auth headers
+- **Automatic retry**: Retries failed requests after token refresh
+- **Error handling**: Network error fallbacks and user-friendly messages
+
+#### UI Utilities
+- **`showAlert(message, type, duration)`**: Toast-style notifications with icons
+- **`showLoading/showEmpty/showError(containerId)`**: Standardized loading states
+- **Date formatting**: `formatDate()`, `formatDateShort()`, `formatDateRelative()`
+- **Currency/Number formatting**: `formatCurrency()`, `formatNumber()`
+- **URL helpers**: `getUrlParam()`, `setUrlParam()` for query string manipulation
+- **Debounce**: `debounce(func, wait)` for search inputs
+
+#### Page-Specific JavaScript (Inline in Templates)
+
+Each template includes page-specific logic in `{% block extra_js %}`:
+
+| Page | Key Features |
+|------|--------------|
+| **home.html** | Loads categories & featured events, hero search, admin stats |
+| **events.html** | Search/filter (category, price range), pagination, URL state sync |
+| **event_detail.html** | Seat selector, price calculator, booking, waitlist join |
+| **my_bookings.html** | Tab filtering, cancel booking, summary cards |
+| **admin_dashboard.html** | Stats cards, recent bookings table, top events, recent users |
+| **profile.html** | Avatar upload, profile update, password change, password strength |
+| **register.html** | Password strength meter, real-time validation |
+| **login.html** | OAuth redirect handlers, form validation |
+
+### Base Template (`base.html`) Features
+
+- **Responsive Navbar**: Collapsible mobile menu with user dropdown
+- **Auth-Aware UI**: Shows login/register when logged out; profile/bookings/admin when logged in
+- **Role-Based Links**: Admin dashboard link only for admin users
+- **Global Alert Container**: Centralized toast notifications
+- **CDN Resources**: Bootstrap, Font Awesome, Google Fonts loaded via CDN
+- **Auto Auth Check**: Runs `checkAuthStatus()` on every page load
+
+### CSS Architecture (`app/static/css/style.css`)
+
+Custom styles (538 lines) organized into sections:
+
+1. **CSS Variables** — Colors, shadows, transitions, fonts
+2. **Global Reset** — Box-sizing, typography, scrollbar styling
+3. **Navbar** — Brand, links, dropdown animations
+4. **Cards** — Hover effects, event/category card variants
+5. **Buttons** — Primary/secondary variants, loading states
+6. **Forms** — Input styling, focus states, validation feedback
+7. **Hero Section** — Gradient background with SVG pattern
+8. **Badges/Alerts/Tables** — Component customizations
+9. **Pagination/Progress** — Custom pagination, progress bars
+10. **Auth Pages** — Centered card layouts
+11. **Dashboard Stats** — Border-left accent cards
+12. **Responsive** — Breakpoints at 768px and 576px
+13. **Print Styles** — Hides UI elements for printing
+
+### Key Frontend Features
+
+#### 1. **Event Discovery**
+- Homepage: Hero search, category grid, featured events carousel
+- Events page: Full-text search, category filter, price range filter, pagination
+- Event detail: Image gallery, seat availability progress bar, real-time price calculation
+
+#### 2. **Booking Flow**
+- Seat selector with +/- buttons (max 10 or available seats)
+- Live total price calculation
+- One-click booking with loading state
+- Waitlist join when sold out
+- Booking history with status tabs (All/Active/Cancelled)
+- Cancel booking with confirmation
+
+#### 3. **Authentication UX**
+- Login/Register with validation
+- Password strength meter (visual progress bar)
+- OAuth buttons (Google, LinkedIn, Facebook)
+- Email verification page
+- Forgot/Reset password flow
+
+#### 4. **User Profile**
+- Avatar upload with preview
+- Profile info editing (name, email, phone, bio, timezone)
+- Password change with current password verification
+- Notification preferences toggle
+
+#### 5. **Admin Dashboard**
+- 8 stat cards (users, events, bookings, revenue + secondary metrics)
+- Recent bookings table with status badges
+- Top events by revenue/bookings with fill rate
+- Recent users with role badges and booking counts
+- Responsive grid layout
+
+#### 6. **Responsive Design**
+- Mobile-first approach with Bootstrap 5 grid
+- Collapsible navbar on mobile
+- Stacked cards on small screens
+- Touch-friendly buttons and inputs
+- Print-optimized styles
+
+### Frontend-Backend Integration
+
+| Frontend | Backend API |
+|----------|-------------|
+| `apiCall('/api/v1/events/')` | `GET /api/v1/events` |
+| `apiCall('/api/v1/bookings/', {method: 'POST', body: ...})` | `POST /api/v1/bookings` |
+| `apiCall('/api/v1/auth/login', {method: 'POST', body: ...})` | `POST /api/v1/auth/login` |
+| `apiCall('/api/v1/admin/dashboard/stats')` | `GET /api/v1/admin/dashboard/stats` |
+| `apiCall('/api/v1/upload/avatar', {method: 'POST', body: FormData})` | `POST /api/v1/upload/avatar` |
+
+### Running the Frontend
+
+The frontend is served **automatically** by FastAPI:
+
+```bash
+# Start the server (serves both API and frontend)
+uvicorn app.main:app --reload
+
+# Access points:
+# - Frontend Homepage:     http://localhost:8000/
+# - Events Listing:        http://localhost:8000/events
+# - Event Detail:          http://localhost:8000/events/{id}
+# - Login:                 http://localhost:8000/login
+# - Register:              http://localhost:8000/register
+# - My Bookings:           http://localhost:8000/my-bookings
+# - Profile:               http://localhost:8000/profile
+# - Admin Dashboard:       http://localhost:8000/admin
+# - API Docs (Swagger):    http://localhost:8000/docs
+```
+
+### Customization Guide
+
+#### Adding a New Page
+1. Create template: `app/templates/new_page.html`
+2. Extend base: `{% extends "base.html" %}`
+3. Add route in `app/routerss/views.py`
+4. Include page-specific JS in `{% block extra_js %}`
+
+#### Modifying Styles
+- Edit `app/static/css/style.css`
+- Use CSS variables for consistent theming
+- Follow existing component patterns
+
+#### Adding JavaScript Features
+- Add utility functions to `main.js`
+- Use `apiCall()` for all backend communication
+- Follow existing patterns for loading/error states
+
+---
+
 ## Prerequisites
 
 - Python 3.11 or higher
@@ -327,20 +528,145 @@ tests/
 ---
 
 ## Automated Tests
-Perfored a detailed Automated test using Pytest
 
-Unit testin
+The project includes a comprehensive test suite using **pytest** with **asyncio** support for testing async FastAPI endpoints.
 
-Integartion
+### Test Structure
 
-Fixtures
+```
+tests/
+├── conftest.py                    # Shared fixtures & test configuration
+├── unit/                          # Unit tests (isolated, fast)
+│   ├── test_auth_utils.py         # Password hashing & verification
+│   ├── test_datetime_utils.py     # Datetime helper functions
+│   ├── test_pagination.py         # Pagination logic
+│   ├── test_response.py           # API response formatters
+│   ├── test_security.py           # JWT token creation/validation
+│   └── test_validators.py         # Input validation functions
+├── integration/                   # Integration tests (API endpoints)
+│   ├── test_admin.py              # Admin dashboard endpoints
+│   ├── test_audit.py              # Audit log endpoints
+│   ├── test_auth.py               # Authentication endpoints
+│   ├── test_categories.py         # Category CRUD endpoints
+│   ├── test_bookings.py           # Booking endpoints
+│   ├── test_events.py             # Event CRUD endpoints
+│   ├── test_invoices.py           # Invoice endpoints
+│   ├── test_notifications.py      # Notification endpoints
+│   ├── test_users.py              # User management endpoints
+│   └── test_waitlist.py           # Waitlist endpoints
+└── fixtures/                      # Test data factories
+    ├── booking_fixtures.py        # Booking test data
+    ├── category_fixtures.py       # Category test data
+    ├── event_fixtures.py          # Event test data
+    └── user_fixtures.py           # User test data
+```
 
--------------
-## Interactive UI
+### Test Dependencies
 
-Interative UI Using jinja templates , Html.
+| Package | Version | Purpose |
+|---------|---------|---------|
+| pytest | 7.4.3 | Test framework |
+| pytest-asyncio | 0.21.1 | Async test support |
+| pytest-cov | 4.1.0 | Coverage reporting |
+| factory-boy | 3.3.0 | Test data factories |
+| faker | 20.1.0 | Fake data generation |
+| freezegun | 1.2.2 | Time manipulation |
 
--------------------
+### Running Tests
+
+```bash
+# Run all tests
+pytest
+
+# Run with coverage
+pytest --cov=app --cov-report=html
+
+# Run specific test file
+pytest tests/integration/test_auth.py -v
+
+# Run unit tests only
+pytest tests/unit/ -v
+
+# Run integration tests only
+pytest tests/integration/ -v
+
+# Run with verbose output
+pytest -v --tb=short
+```
+
+### Test Configuration (`conftest.py`)
+
+- **Database**: Uses in-memory SQLite for fast, isolated tests
+- **Fixtures**: Provides `client` (TestClient), `db_session`, `admin_user`, `regular_user`, `auth_headers`
+- **Factories**: Factory Boy factories for User, Event, Category, Booking models
+- **Authentication**: Helper fixtures for generating valid JWT tokens
+
+### Writing Tests
+
+```python
+# Unit test example
+def test_password_hashing():
+    from app.utils.auth_utils import hash_password, verify_password
+    password = "Test@123456"
+    hashed = hash_password(password)
+    assert verify_password(password, hashed)
+
+# Integration test example
+def test_create_event(client, admin_auth_headers):
+    response = client.post(
+        "/api/v1/events/",
+        json={"title": "Test Event", ...},
+        headers=admin_auth_headers
+    )
+    assert response.status_code == 201
+    assert response.json()["success"] is True
+```
+
+---
+
+## Interactive UI (Frontend Pages)
+
+The application includes a complete **server-side rendered web interface** built with Jinja2 templates, accessible directly in the browser. No separate frontend build process is required.
+
+### Available Pages
+
+| Route | Template | Description | Auth Required |
+|-------|----------|-------------|---------------|
+| `/` | `home.html` | Landing page with hero, stats, categories, featured events | No |
+| `/events` | `events.html` | Events listing with search, filters, pagination | No |
+| `/events/{id}` | `event_detail.html` | Event details with booking sidebar | No* |
+| `/login` | `login.html` | Login form with OAuth buttons | No |
+| `/register` | `register.html` | Registration with password strength meter | No |
+| `/profile` | `profile.html` | User profile, avatar, password change | Yes |
+| `/my-bookings` | `my_bookings.html` | User's bookings with filter tabs | Yes |
+| `/admin` | `admin_dashboard.html` | Admin dashboard with stats & analytics | Admin |
+| `/verify-email` | `verify_email.html` | Email verification page | No |
+
+*Booking requires authentication
+
+### Key UI Features
+
+- **Responsive Design**: Works on mobile, tablet, desktop
+- **Real-time Updates**: Booking seat availability, price calculation
+- **Toast Notifications**: Success/error/warning alerts auto-dismiss
+- **Loading States**: Spinners, skeleton screens, empty states
+- **Form Validation**: Client-side + server-side validation feedback
+- **OAuth Integration**: One-click Google/LinkedIn/Facebook login
+- **Admin Dashboard**: Visual stats cards, tables, rankings
+- **Image Upload**: Drag-and-drop avatar/event/category images
+
+### Accessing the UI
+
+```bash
+# Start server
+uvicorn app.main:app --reload
+
+# Open in browser
+http://localhost:8000/
+```
+
+---
+
 ## Installation
 
 ### Step 1: Clone the Repository
