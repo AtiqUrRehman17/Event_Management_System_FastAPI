@@ -2,7 +2,7 @@ from datetime import datetime
 from sqlalchemy import Column, Integer, DateTime, ForeignKey, Enum, String, Float
 from sqlalchemy.orm import relationship
 from app.core.database import Base
-from app.core.enums import BookingStatus
+from app.core.enums import BookingStatus, PaymentStatus
 from app.utils.datetime_utils import get_current_utc
 
 
@@ -23,7 +23,7 @@ class Booking(Base):
     # Invoice fields
     invoice_number = Column(String(50), unique=True, nullable=True, index=True)
     invoice_generated_at = Column(DateTime, nullable=True)
-    payment_status = Column(String(20), default="pending")  # pending, paid, failed, refunded
+    payment_status = Column(Enum(PaymentStatus), default=PaymentStatus.PENDING, nullable=False, index=True)
     payment_method = Column(String(50), nullable=True)
     payment_transaction_id = Column(String(255), nullable=True)
     paid_at = Column(DateTime, nullable=True)

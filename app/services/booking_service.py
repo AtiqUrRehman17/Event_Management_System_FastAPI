@@ -12,6 +12,7 @@ from app.models.booking import Booking
 from app.models.event import Event
 from app.models.user import User
 from app.models.category import Category
+from app.models.payment import Payment
 from app.schemas.booking import BookingCreate, BookingFilterParams, BookingSortField, BookingSortOrder, BookingHistoryFilterParams
 from app.core.exceptions import (
     EventNotFoundException,
@@ -21,7 +22,7 @@ from app.core.exceptions import (
     BookingNotOwnedException,
     BookingAlreadyCancelledException
 )
-from app.core.enums import EventStatus, BookingStatus
+from app.core.enums import EventStatus, BookingStatus, PaymentStatus
 from app.pagination import PaginationParams, paginate_query
 from app.utils.datetime_utils import get_current_utc
 from app.services.notification_service import NotificationService
@@ -170,6 +171,22 @@ class BookingService:
             }
         )
         
+        # Create associated payment record
+        payment = Payment(
+            booking_id=booking.id,
+            amount=round(total_price, 2),
+            currency="USD",
+            status=PaymentStatus.PENDING,
+            method=None,
+            transaction_id=f"txn_{booking.id}_{get_current_utc().strftime('%Y%m%d%H%M%S')}",
+            initiated_at=get_current_utc()
+        )
+        db.add(payment)
+        db.commit()
+        db.refresh(payment)
+
+        logger.info(f"Payment record created: Payment {payment.id} for Booking {booking.id}")
+
         # Send booking confirmation notification
         try:
             NotificationService.send_booking_confirmation(db, booking.id)

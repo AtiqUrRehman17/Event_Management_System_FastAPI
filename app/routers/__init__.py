@@ -10,6 +10,7 @@ from .notifications import router as notifications_router
 from .admin import router as admin_router
 from .audit import router as audit_router
 from .upload import router as upload_router
+from .payments import router as payments_router
 
 __all__ = [
     "auth_router",
@@ -24,4 +25,5 @@ __all__ = [
     "admin_router",
     "audit_router",
     "upload_router",
+    "payments_router",
 ]
