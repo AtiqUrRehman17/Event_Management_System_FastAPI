@@ -12,6 +12,8 @@ from app.services.auth_service import AuthService
 from app.schemas.auth import GoogleAuthRequest, LinkedInAuthRequest, FacebookAuthRequest
 from app.utils.response import success_response
 import logging
+import urllib.parse
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +47,7 @@ async def google_callback(
 ):
     """
     Google OAuth callback endpoint.
+    Redirects to frontend callback page with tokens.
     """
     try:
         user, is_new_user = await GoogleOAuthService.authenticate_or_create_user(
@@ -64,36 +67,36 @@ async def google_callback(
             user_info=user_info
         )
         
-        response_data = {
-            "access_token": access_token,
-            "refresh_token": refresh_token,
-            "token_type": "bearer",
-            "user": {
-                "id": user.id,
-                "username": user.username,
-                "email": user.email,
-                "first_name": user.first_name,
-                "last_name": user.last_name,
-                "role": user.role,
-                "is_verified": user.is_verified,
-                "profile_picture": user.profile_picture
-            },
-            "is_new_user": is_new_user
+        user_data = {
+            "id": user.id,
+            "username": user.username,
+            "email": user.email,
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+            "role": user.role,
+            "is_verified": user.is_verified,
+            "profile_picture": user.profile_picture
         }
         
-        message = "Account created and logged in successfully with Google" if is_new_user else "Logged in successfully with Google"
+        # Redirect to frontend callback page with tokens
+        frontend_callback_url = f"{settings.FRONTEND_URL}/oauth/callback"
+        params = {
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "user": json.dumps(user_data),
+            "is_new_user": str(is_new_user).lower()
+        }
+        redirect_url = f"{frontend_callback_url}?{urllib.parse.urlencode(params)}"
         
-        return success_response(
-            data=response_data,
-            message=message
-        )
+        return RedirectResponse(url=redirect_url)
         
     except Exception as e:
         logger.error(f"Google OAuth callback error: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Google authentication failed: {str(e)}"
-        )
+        # Redirect to frontend with error
+        frontend_callback_url = f"{settings.FRONTEND_URL}/oauth/callback"
+        error_params = {"error": urllib.parse.quote(f"Google authentication failed: {str(e)}")}
+        redirect_url = f"{frontend_callback_url}?{urllib.parse.urlencode(error_params)}"
+        return RedirectResponse(url=redirect_url)
 
 
 @router.post("/google/token")
@@ -165,6 +168,7 @@ async def linkedin_callback(
 ):
     """
     LinkedIn OAuth callback endpoint.
+    Redirects to frontend callback page with tokens.
     """
     try:
         user, is_new_user, token_info = await LinkedInOAuthService.authenticate_or_create_user(
@@ -184,38 +188,36 @@ async def linkedin_callback(
             user_info=user_info
         )
         
-        response_data = {
-            "access_token": access_token,
-            "refresh_token": refresh_token,
-            "token_type": "bearer",
-            "user": {
-                "id": user.id,
-                "username": user.username,
-                "email": user.email,
-                "first_name": user.first_name,
-                "last_name": user.last_name,
-                "role": user.role,
-                "is_verified": user.is_verified,
-                "profile_picture": user.profile_picture
-            },
-            "is_new_user": is_new_user,
-            "linkedin_token_expires_in": token_info.get("expires_in"),
-            "linkedin_token_expires_at": token_info.get("expires_at").isoformat() if token_info.get("expires_at") else None
+        user_data = {
+            "id": user.id,
+            "username": user.username,
+            "email": user.email,
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+            "role": user.role,
+            "is_verified": user.is_verified,
+            "profile_picture": user.profile_picture
         }
         
-        message = "Account created and logged in successfully with LinkedIn" if is_new_user else "Logged in successfully with LinkedIn"
+        # Redirect to frontend callback page with tokens
+        frontend_callback_url = f"{settings.FRONTEND_URL}/oauth/callback"
+        params = {
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "user": json.dumps(user_data),
+            "is_new_user": str(is_new_user).lower()
+        }
+        redirect_url = f"{frontend_callback_url}?{urllib.parse.urlencode(params)}"
         
-        return success_response(
-            data=response_data,
-            message=message
-        )
+        return RedirectResponse(url=redirect_url)
         
     except Exception as e:
         logger.error(f"LinkedIn OAuth callback error: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"LinkedIn authentication failed: {str(e)}"
-        )
+        # Redirect to frontend with error
+        frontend_callback_url = f"{settings.FRONTEND_URL}/oauth/callback"
+        error_params = {"error": urllib.parse.quote(f"LinkedIn authentication failed: {str(e)}")}
+        redirect_url = f"{frontend_callback_url}?{urllib.parse.urlencode(error_params)}"
+        return RedirectResponse(url=redirect_url)
 
 
 @router.post("/linkedin/token")
@@ -289,6 +291,7 @@ async def facebook_callback(
     """
     Facebook OAuth callback endpoint.
     Facebook redirects here after user approves/denies the request.
+    Redirects to frontend callback page with tokens.
     """
     try:
         user, is_new_user, token_info = await FacebookOAuthService.authenticate_or_create_user(
@@ -308,38 +311,36 @@ async def facebook_callback(
             user_info=user_info
         )
         
-        response_data = {
-            "access_token": access_token,
-            "refresh_token": refresh_token,
-            "token_type": "bearer",
-            "user": {
-                "id": user.id,
-                "username": user.username,
-                "email": user.email,
-                "first_name": user.first_name,
-                "last_name": user.last_name,
-                "role": user.role,
-                "is_verified": user.is_verified,
-                "profile_picture": user.profile_picture
-            },
-            "is_new_user": is_new_user,
-            "facebook_token_expires_in": token_info.get("expires_in"),
-            "facebook_token_expires_at": token_info.get("expires_at").isoformat() if token_info.get("expires_at") else None
+        user_data = {
+            "id": user.id,
+            "username": user.username,
+            "email": user.email,
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+            "role": user.role,
+            "is_verified": user.is_verified,
+            "profile_picture": user.profile_picture
         }
         
-        message = "Account created and logged in successfully with Facebook" if is_new_user else "Logged in successfully with Facebook"
+        # Redirect to frontend callback page with tokens
+        frontend_callback_url = f"{settings.FRONTEND_URL}/oauth/callback"
+        params = {
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "user": json.dumps(user_data),
+            "is_new_user": str(is_new_user).lower()
+        }
+        redirect_url = f"{frontend_callback_url}?{urllib.parse.urlencode(params)}"
         
-        return success_response(
-            data=response_data,
-            message=message
-        )
+        return RedirectResponse(url=redirect_url)
         
     except Exception as e:
         logger.error(f"Facebook OAuth callback error: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Facebook authentication failed: {str(e)}"
-        )
+        # Redirect to frontend with error
+        frontend_callback_url = f"{settings.FRONTEND_URL}/oauth/callback"
+        error_params = {"error": urllib.parse.quote(f"Facebook authentication failed: {str(e)}")}
+        redirect_url = f"{frontend_callback_url}?{urllib.parse.urlencode(error_params)}"
+        return RedirectResponse(url=redirect_url)
 
 
 @router.post("/facebook/token")

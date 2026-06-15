@@ -339,6 +339,8 @@ templates/
 ├── events.html               # Events listing with search, filters, pagination
 ├── event_detail.html         # Single event view with booking sidebar
 ├── login.html                # Login page with OAuth buttons
+├── resend_verification.html                # resend verification
+├── oauth_callback.html                # oauth
 ├── register.html             # Registration page with password strength meter
 ├── profile.html              # User profile management (avatar, password, info)
 ├── my_bookings.html          # User's bookings with tabs (All/Active/Cancelled)
