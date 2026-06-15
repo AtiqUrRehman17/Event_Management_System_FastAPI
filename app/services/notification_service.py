@@ -307,6 +307,7 @@ class NotificationService:
             return
         
         event = booking.event
+        user = booking.user
         
         # Create in-app notification
         NotificationService.create_notification(
@@ -319,15 +320,14 @@ class NotificationService:
             extra_data={"booking_id": booking.id, "event_id": event.id}
         )
         
-        # Send email notification
-        NotificationService.create_notification(
-            db=db,
-            user_id=booking.user_id,
-            notification_type=NotificationType.BOOKING_CONFIRMED,
-            title=f"Booking Confirmed - {event.title}",
-            message=f"Dear customer,\n\nYour booking for '{event.title}' has been confirmed.\n\nBooking Details:\n- Event: {event.title}\n- Date: {event.event_date}\n- Location: {event.location}\n- Seats: {booking.number_of_seats}\n- Total: ${booking.total_price}\n\nThank you for choosing Event Management System!",
-            channel=NotificationChannel.EMAIL,
-            extra_data={"booking_id": booking.id, "event_id": event.id}
+        # Send email using dedicated booking confirmation email template
+        EmailService.send_booking_confirmation_email(
+            to_email=user.email,
+            username=user.username,
+            event_title=event.title,
+            booking_id=booking.id,
+            seats=booking.number_of_seats,
+            total_price=booking.total_price
         )
     
     @staticmethod
