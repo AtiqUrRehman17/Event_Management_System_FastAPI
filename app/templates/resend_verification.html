@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+
+{% block title %}Resend Verification - EventHub{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-md-5">
+            <div class="card shadow border-0">
+                <div class="card-body p-4">
+                    <div class="text-center mb-4">
+                        <i class="fas fa-envelope-open-text fa-2x text-primary mb-2"></i>
+                        <h3 class="fw-bold">Resend Verification Email</h3>
+                        <p class="text-muted">Enter your email to receive a new verification link</p>
+                    </div>
+
+                    <form id="resendForm" onsubmit="handleResendVerification(event)">
+                        <div class="mb-3">
+                            <label for="email" class="form-label fw-semibold">
+                                <i class="fas fa-envelope me-1"></i>Email Address
+                            </label>
+                            <input type="email" class="form-control form-control-lg"
+                                   id="email" name="email"
+                                   placeholder="you@example.com" required>
+                        </div>
+
+                        <div class="alert alert-danger d-none" id="resendError" role="alert"></div>
+                        <div class="alert alert-success d-none" id="resendSuccess" role="alert"></div>
+
+                        <button type="submit" class="btn btn-primary btn-lg w-100 mb-3" id="resendBtn">
+                            <i class="fas fa-paper-plane me-2"></i>Send Verification Email
+                        </button>
+                    </form>
+
+                    <hr>
+
+                    <p class="text-center mb-0">
+                        <a href="/login" class="text-decoration-none fw-semibold">Back to Login</a>
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    async function handleResendVerification(event) {
+        event.preventDefault();
+
+        const resendBtn = document.getElementById('resendBtn');
+        const errorDiv = document.getElementById('resendError');
+        const successDiv = document.getElementById('resendSuccess');
+
+        // Reset alerts
+        errorDiv.classList.add('d-none');
+        successDiv.classList.add('d-none');
+
+        const email = document.getElementById('email').value.trim();
+
+        // Disable button
+        resendBtn.disabled = true;
+        resendBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Sending...';
+
+        try {
+            const response = await fetch('/api/v1/auth/resend-verification', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email })
+            });
+
+            const data = await response.json();
+
+            if (response.ok && data.success) {
+                successDiv.innerHTML = `
+                    <i class="fas fa-check-circle me-2"></i>
+                    <strong>Verification email sent!</strong><br>
+                    ${data.message || 'Please check your inbox.'}
+                `;
+                successDiv.classList.remove('d-none');
+                document.getElementById('resendForm').reset();
+            } else {
+                errorDiv.textContent = data.message || 'Failed to send verification email. Please try again.';
+                errorDiv.classList.remove('d-none');
+            }
+        } catch (error) {
+            errorDiv.textContent = 'Network error. Please try again.';
+            errorDiv.classList.remove('d-none');
+        } finally {
+            resendBtn.disabled = false;
+            resendBtn.innerHTML = '<i class="fas fa-paper-plane me-2"></i>Send Verification Email';
+        }
+    }
+</script>
+{% endblock %}

@@ -177,6 +177,14 @@ async def admin_dashboard_page(request: Request):
     return templates.TemplateResponse("admin_dashboard.html", {"request": request})
 
 
+# ── OAuth Callback Page ────────────────────────
+
+@router.get("/oauth/callback", response_class=HTMLResponse)
+async def oauth_callback_page(request: Request):
+    """OAuth callback page - Handles redirect from backend after OAuth authentication"""
+    return templates.TemplateResponse("oauth_callback.html", {"request": request})
+
+
 # ── Error Pages ──────────────────────────────
 
 @router.get("/404", response_class=HTMLResponse)

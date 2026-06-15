@@ -29,6 +29,9 @@ class Event(Base):
     deleted_at = Column(DateTime, nullable=True)
     deleted_by = Column(Integer, ForeignKey("users.id"), nullable=True)
     
+    # Optimistic locking version
+    version = Column(Integer, default=1, nullable=False)
+    
     # Relationships
     category = relationship("Category", back_populates="events")
     bookings = relationship("Booking", back_populates="event", cascade="all, delete-orphan")

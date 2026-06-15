@@ -89,7 +89,7 @@ class Settings(BaseSettings):
                 # In development, generate a random key and warn
                 self.SECRET_KEY = secrets.token_urlsafe(32)
                 print("=" * 60)
-                print("⚠️  WARNING: SECRET_KEY not set in .env file!")
+                print("WARNING: SECRET_KEY not set in .env file!")
                 print(f"Generated random key for development: {self.SECRET_KEY}")
                 print("For production, please set a secure SECRET_KEY in your .env file!")
                 print("=" * 60)
@@ -97,7 +97,7 @@ class Settings(BaseSettings):
                 # In production, fail hard
                 raise ValueError(
                     "\n" + "=" * 60 + "\n"
-                    "❌ SECURITY ERROR: SECRET_KEY is required in production mode!\n"
+                    "SECURITY ERROR: SECRET_KEY is required in production mode!\n"
                     "Please set a secure SECRET_KEY in your .env file.\n"
                     "You can generate one using:\n"
                     "    python -c 'import secrets; print(secrets.token_urlsafe(32))'\n"
@@ -120,13 +120,13 @@ class Settings(BaseSettings):
         if self.SECRET_KEY and self.SECRET_KEY.lower() in weak_keys:
             if self.DEBUG:
                 print("=" * 60)
-                print("⚠️  WARNING: You are using a weak SECRET_KEY!")
+                print("WARNING: You are using a weak SECRET_KEY!")
                 print("Please generate a strong key for production use.")
                 print("=" * 60)
             else:
                 raise ValueError(
                     "\n" + "=" * 60 + "\n"
-                    "❌ SECURITY ERROR: SECRET_KEY is too weak for production!\n"
+                    "SECURITY ERROR: SECRET_KEY is too weak for production!\n"
                     f"Current key '{self.SECRET_KEY}' is commonly used and insecure.\n"
                     "Generate a strong random key using:\n"
                     "    python -c 'import secrets; print(secrets.token_urlsafe(32))'\n"

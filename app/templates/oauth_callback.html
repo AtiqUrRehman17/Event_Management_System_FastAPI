@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+
+{% block title %}Completing Sign In - EventHub{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-md-4">
+            <div class="card shadow border-0">
+                <div class="card-body p-5 text-center">
+                    <div class="spinner-border text-primary mb-3" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <h4 class="fw-bold">Completing Sign In</h4>
+                    <p class="text-muted">Please wait while we redirect you...</p>
+                    
+                    <!-- Error message container -->
+                    <div id="errorContainer" class="alert alert-danger d-none mt-3" role="alert"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    (function() {
+        'use strict';
+        
+        const errorContainer = document.getElementById('errorContainer');
+        
+        function showError(message) {
+            errorContainer.textContent = message;
+            errorContainer.classList.remove('d-none');
+        }
+        
+        function redirectToHome() {
+            window.location.href = '/';
+        }
+        
+        // Extract tokens from URL hash fragment (for security, tokens should be in hash, not query params)
+        // But since backend will redirect with query params, we'll read from search params
+        const urlParams = new URLSearchParams(window.location.search);
+        
+        const accessToken = urlParams.get('access_token');
+        const refreshToken = urlParams.get('refresh_token');
+        const userStr = urlParams.get('user');
+        const isNewUser = urlParams.get('is_new_user');
+        const error = urlParams.get('error');
+        
+        if (error) {
+            showError(decodeURIComponent(error));
+            setTimeout(() => {
+                window.location.href = '/login';
+            }, 3000);
+            return;
+        }
+        
+        if (!accessToken || !refreshToken || !userStr) {
+            showError('Invalid callback. Missing authentication data.');
+            setTimeout(() => {
+                window.location.href = '/login';
+            }, 3000);
+            return;
+        }
+        
+        try {
+            const user = JSON.parse(decodeURIComponent(userStr));
+            
+            // Store tokens and user info
+            localStorage.setItem('access_token', accessToken);
+            localStorage.setItem('refresh_token', refreshToken);
+            localStorage.setItem('user', JSON.stringify(user));
+            
+            // Show success message briefly
+            const message = isNewUser === 'true' 
+                ? 'Account created successfully! Welcome to EventHub!'
+                : 'Signed in successfully!';
+            
+            // Use the alert system if available, otherwise just redirect
+            if (typeof showAlert === 'function') {
+                showAlert(message, 'success');
+            }
+            
+            // Redirect to home page
+            setTimeout(redirectToHome, 1000);
+            
+        } catch (e) {
+            console.error('Failed to parse user data:', e);
+            showError('Failed to process authentication data.');
+            setTimeout(() => {
+                window.location.href = '/login';
+            }, 3000);
+        }
+    })();
+</script>
+{% endblock %}

@@ -43,7 +43,8 @@ class BookingService:
         retry_delay: float = 0.1
     ) -> Booking:
         """
-        Create booking with automatic retry on deadlock.
+        Create booking with automatic retry on concurrency conflicts.
+        Retries on both database deadlocks and optimistic locking failures.
         """
         for attempt in range(max_retries):
             try:
@@ -52,6 +53,15 @@ class BookingService:
                 error_msg = str(e).lower()
                 if ("deadlock" in error_msg or "lock" in error_msg) and attempt < max_retries - 1:
                     logger.warning(f"Database lock detected, retrying booking... (attempt {attempt + 2}/{max_retries})")
+                    db.rollback()
+                    time.sleep(retry_delay * (attempt + 1))  # Exponential backoff
+                    continue
+                raise
+            except InsufficientSeatsException as e:
+                # Check if this is a concurrency conflict (not actual insufficient seats)
+                error_msg = str(e)
+                if "availability changed" in error_msg and attempt < max_retries - 1:
+                    logger.warning(f"Concurrency conflict detected, retrying booking... (attempt {attempt + 2}/{max_retries})")
                     db.rollback()
                     time.sleep(retry_delay * (attempt + 1))  # Exponential backoff
                     continue
@@ -69,14 +79,13 @@ class BookingService:
         request=None
     ) -> Booking:
         """
-        Create a new booking with row-level locking to prevent overselling.
-        Uses SELECT ... FOR UPDATE to lock the event row during the transaction.
+        Create a new booking with optimistic locking to prevent overselling.
+        Uses version column for concurrency control - works on SQLite and other databases.
         """
-        # Use with_for_update() to lock the event row
-        # This prevents concurrent requests from booking the same seat
+        # First, read the event to get current version and check availability
         event = db.query(Event).filter(
             Event.id == booking_data.event_id
-        ).with_for_update().first()  # Row-level lock!
+        ).first()
         
         if not event:
             raise EventNotFoundException()
@@ -96,7 +105,7 @@ class BookingService:
         if event_date < now:
             raise EventNotAvailableException("Cannot book past events")
 
-        # Check seat availability (under lock)
+        # Check seat availability
         if event.available_seats < booking_data.number_of_seats:
             raise InsufficientSeatsException(event.available_seats)
 
@@ -104,24 +113,44 @@ class BookingService:
         # Round to 2 decimal places to handle fractional prices correctly
         total_price = round(event.price * booking_data.number_of_seats, 2)
 
-        # Create booking with float total_price
+        # Atomic update with optimistic locking:
+        # UPDATE events SET available_seats = available_seats - ?, version = version + 1
+        # WHERE id = ? AND available_seats >= ? AND version = ?
+        # This ensures we don't oversell and detects concurrent modifications
+        rows_updated = db.query(Event).filter(
+            Event.id == booking_data.event_id,
+            Event.available_seats >= booking_data.number_of_seats,
+            Event.version == event.version
+        ).update({
+            Event.available_seats: Event.available_seats - booking_data.number_of_seats,
+            Event.version: Event.version + 1
+        }, synchronize_session=False)
+        
+        if rows_updated == 0:
+            # Another transaction modified the event - retry
+            db.rollback()
+            raise InsufficientSeatsException(
+                "Seat availability changed, please try again"
+            )
+
+        # Create booking
         booking = Booking(
             user_id=user_id,
             event_id=booking_data.event_id,
             number_of_seats=booking_data.number_of_seats,
-            total_price=total_price,  # ✅ Now stores as Float with 2 decimal places
+            total_price=total_price,
             status=BookingStatus.ACTIVE,
             payment_status="pending",
             tax_rate=0.0,
             tax_amount=0.0
         )
 
-        # Update available seats (under lock)
-        event.available_seats -= booking_data.number_of_seats
-
         db.add(booking)
         db.commit()
         db.refresh(booking)
+
+        # Refresh event to get updated version
+        db.refresh(event)
 
         logger.info(f"Booking created: User {user_id} booked {booking_data.number_of_seats} seat(s) for event {booking_data.event_id}, Total: ${total_price:.2f}")
         
