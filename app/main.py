@@ -28,6 +28,7 @@ from app.routers import (
     admin_router,
     audit_router,
     upload_router,
+    payments_router,
 )
 from app.routerss.views import router as views_router
 from app.utils import register_error_handlers
@@ -252,6 +253,7 @@ app.include_router(notifications_router, prefix=settings.API_PREFIX)
 app.include_router(admin_router, prefix=settings.API_PREFIX)
 app.include_router(audit_router, prefix=settings.API_PREFIX)
 app.include_router(upload_router, prefix=settings.API_PREFIX)
+app.include_router(payments_router, prefix=settings.API_PREFIX)
 
 # ── Register error handlers AFTER all routers ──
 register_error_handlers(app)

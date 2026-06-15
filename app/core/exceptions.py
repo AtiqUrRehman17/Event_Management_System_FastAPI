@@ -129,6 +129,16 @@ class BookingAlreadyCancelledException(CustomHTTPException):
         )
 
 
+# Payment Exceptions
+class PaymentNotFoundException(CustomHTTPException):
+    def __init__(self):
+        super().__init__(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Payment not found",
+            error_code="PAYMENT_NOT_FOUND"
+        )
+
+
 # Category Exceptions
 class CategoryNotFoundException(CustomHTTPException):
     def __init__(self):

@@ -13,10 +13,15 @@ from reportlab.lib.units import inch
 from app.models.booking import Booking
 from app.models.user import User
 from app.models.event import Event
+from app.models.payment import Payment
 from app.schemas.invoice import InvoiceData, InvoiceAddress, InvoiceItem
 from app.core.exceptions import BookingNotFoundException, PermissionDeniedException
-from app.core.enums import BookingStatus
+from app.core.enums import BookingStatus, PaymentStatus, PaymentMethod
 from app.utils.datetime_utils import get_current_utc
+from app.services.audit_service import AuditService
+from app.services.notification_service import NotificationService
+from app.models.audit_log import AuditActionType, AuditActionCategory
+from app.models.notification import NotificationType
 import logging
 
 logger = logging.getLogger(__name__)
@@ -76,6 +81,9 @@ class InvoiceService:
         event = booking.event
         user = booking.user
         
+        # Get the latest payment for this booking
+        payment = db.query(Payment).filter(Payment.booking_id == booking_id).order_by(Payment.created_at.desc()).first()
+        
         # Calculate tax with proper decimal precision
         tax_calculation = InvoiceService.calculate_tax(booking.total_price, tax_rate)
         
@@ -94,7 +102,7 @@ class InvoiceService:
             InvoiceItem(
                 description=f"{event.title} - {event.event_date.strftime('%B %d, %Y at %I:%M %p')}",
                 quantity=booking.number_of_seats,
-                unit_price=round(event.price, 2),  # Round unit price to 2 decimals
+                unit_price=round(event.price, 2),
                 total=round(booking.number_of_seats * event.price, 2)
             )
         ]
@@ -115,11 +123,18 @@ class InvoiceService:
             full_name=f"{user.first_name} {user.last_name}",
             email=user.email,
             phone=user.phone,
-            address_line1=user.bio  # Placeholder - you can add proper address fields
+            address_line1=user.bio
         )
         
+        # Determine payment info from Payment model (preferred) or fallback to booking fields
+        payment_status = payment.status.value if payment else (booking.payment_status or "pending")
+        payment_method = payment.method.value if payment and payment.method else booking.payment_method
+        payment_date = payment.processed_at if payment else booking.paid_at
+        transaction_id = payment.transaction_id if payment else booking.payment_transaction_id
+        total_amount = payment.amount if payment else (booking.total_amount or tax_calculation["total_amount"])
+        
         # Generate QR code (optional)
-        qr_code_url = InvoiceService.generate_qr_code(booking.invoice_number, booking.total_amount or tax_calculation["total_amount"])
+        qr_code_url = InvoiceService.generate_qr_code(booking.invoice_number, total_amount)
         
         return InvoiceData(
             invoice_number=booking.invoice_number,
@@ -136,12 +151,12 @@ class InvoiceService:
             subtotal=tax_calculation["subtotal"],
             tax_rate=tax_rate,
             tax_amount=tax_calculation["tax_amount"],
-            total_amount=tax_calculation["total_amount"],
+            total_amount=total_amount,
             currency="USD",
-            payment_status=booking.payment_status or "pending",
-            payment_method=booking.payment_method,
-            payment_date=booking.paid_at,
-            transaction_id=booking.payment_transaction_id,
+            payment_status=payment_status,
+            payment_method=payment_method,
+            payment_date=payment_date,
+            transaction_id=transaction_id,
             items=items,
             notes="Thank you for your booking!",
             terms="Tickets are non-refundable within 7 days of the event.",
@@ -299,13 +314,22 @@ class InvoiceService:
         booking_id: int,
         payment_status: str,
         payment_method: str = None,
-        transaction_id: str = None
+        transaction_id: str = None,
+        user_id: Optional[int] = None,
+        request=None
     ) -> Booking:
-        """Update booking payment status"""
+        """Update booking and payment status with audit log and notifications"""
         booking = db.query(Booking).filter(Booking.id == booking_id).first()
         if not booking:
             raise BookingNotFoundException()
         
+        # Get the payment record
+        payment = db.query(Payment).filter(Payment.booking_id == booking_id).order_by(Payment.created_at.desc()).first()
+        
+        old_booking_status = booking.payment_status
+        old_payment_status = payment.status.value if payment else None
+        
+        # Update booking
         booking.payment_status = payment_status
         if payment_method:
             booking.payment_method = payment_method
@@ -315,7 +339,77 @@ class InvoiceService:
         if payment_status == "paid":
             booking.paid_at = get_current_utc()
         
+        # Update payment record if exists
+        if payment:
+            try:
+                payment.status = PaymentStatus(payment_status)
+            except ValueError:
+                pass  # Invalid status, keep existing
+            
+            if payment_method:
+                try:
+                    payment.method = PaymentMethod(payment_method)
+                except ValueError:
+                    pass
+            
+            if transaction_id:
+                payment.gateway_transaction_id = transaction_id
+            
+            if payment_status == "paid":
+                payment.processed_at = get_current_utc()
+            elif payment_status in ["failed", "refunded", "partially_refunded"]:
+                payment.processed_at = get_current_utc()
+            
+            payment.updated_at = get_current_utc()
+        
         db.commit()
         db.refresh(booking)
+        
+        # Audit log
+        if user_id:
+            AuditService.log_action(
+                db=db,
+                user_id=user_id,
+                action=AuditActionType.PAYMENT_UPDATE,
+                category=AuditActionCategory.PAYMENT,
+                request=request,
+                entity_type="booking",
+                entity_id=booking_id,
+                old_value={
+                    "payment_status": old_booking_status,
+                    "payment_method": booking.payment_method,
+                    "payment_transaction_id": booking.payment_transaction_id
+                },
+                new_value={
+                    "payment_status": payment_status,
+                    "payment_method": payment_method,
+                    "payment_transaction_id": transaction_id
+                }
+            )
+        
+        # Trigger notifications for status changes
+        if user_id and old_booking_status != payment_status:
+            if payment_status == "paid":
+                NotificationService.create_notification(
+                    db=db,
+                    user_id=user_id,
+                    notification_type=NotificationType.PAYMENT_SUCCESSFUL,
+                    title="Payment Successful",
+                    message=f"Your payment for booking #{booking_id} has been confirmed.",
+                    channel=NotificationType.PAYMENT_SUCCESSFUL,
+                    extra_data={"booking_id": booking_id, "payment_status": payment_status}
+                )
+            elif payment_status == "failed":
+                NotificationService.create_notification(
+                    db=db,
+                    user_id=user_id,
+                    notification_type=NotificationType.PAYMENT_FAILED,
+                    title="Payment Failed",
+                    message=f"Your payment for booking #{booking_id} has failed.",
+                    channel=NotificationType.PAYMENT_FAILED,
+                    extra_data={"booking_id": booking_id, "payment_status": payment_status}
+                )
+        
+        logger.info(f"Payment status updated: Booking {booking_id} -> {payment_status} by User {user_id}")
         
         return booking
