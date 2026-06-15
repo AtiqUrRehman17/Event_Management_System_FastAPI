@@ -30,7 +30,7 @@ from app.routers import (
     upload_router,
     payments_router,
 )
-from app.routerss.views import router as views_router
+from app.views.views import router as views_router
 from app.utils import register_error_handlers
 from app.services.event_service import EventService
 from app.services.auth_service import AuthService
@@ -227,7 +227,8 @@ app = FastAPI(
 # CORS middleware - add BEFORE anything else
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://127.0.0.1:8000/"],
+    allow_origins=["http://127.0.0.1:8000",
+                   "http://localhost:8000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
