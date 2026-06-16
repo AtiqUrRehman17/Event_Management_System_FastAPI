@@ -100,7 +100,7 @@ class PaymentService:
         AuditService.log_action(
             db=db,
             user_id=user_id,
-            action=AuditActionType.PAYMENT_CREATE,
+            action=AuditActionType.PAYMENT_INITIATE,
             category=AuditActionCategory.PAYMENT,
             entity_type="payment",
             entity_id=payment.id,
