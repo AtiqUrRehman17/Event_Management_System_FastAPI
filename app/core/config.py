@@ -40,6 +40,7 @@ class Settings(BaseSettings):
     EMAIL_HOST_USER: str = ""
     EMAIL_HOST_PASSWORD: str = ""
     EMAIL_PROVIDER: str = "smtp"
+    POSTMARK_API_TOKEN: str = ""
 
     # Frontend URL for email links
     FRONTEND_URL: str = "http://localhost:8000"
@@ -50,6 +51,8 @@ class Settings(BaseSettings):
     # Email Verification Configuration
     VERIFICATION_TOKEN_EXPIRE_MINUTES: int = 1440  # 24 hours
     REQUIRE_EMAIL_VERIFICATION: bool = True
+    TESTING: bool = False
+    AUTO_COPY_ENV: bool = True
 
     # Image Upload Configuration
     UPLOAD_DIR: str = "uploads"
@@ -79,6 +82,26 @@ class Settings(BaseSettings):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self._validate_secret_key()
+        self._apply_dev_defaults()
+
+    def _is_email_configured(self) -> bool:
+        """Check if email sending is actually configured"""
+        if self.EMAIL_PROVIDER == "postmark":
+            return bool(self.POSTMARK_API_TOKEN)
+        return bool(self.EMAIL_HOST_USER and self.EMAIL_HOST_PASSWORD and self.DEFAULT_FROM_EMAIL)
+
+    def _apply_dev_defaults(self) -> None:
+        """Apply smart defaults for development mode"""
+        if self.TESTING:
+            return
+        if self.DEBUG and not self._is_email_configured():
+            if self.REQUIRE_EMAIL_VERIFICATION:
+                self.REQUIRE_EMAIL_VERIFICATION = False
+                print("=" * 60)
+                print("DEV MODE: Email not configured, disabling REQUIRE_EMAIL_VERIFICATION")
+                print("Set EMAIL_HOST_USER, EMAIL_HOST_PASSWORD, and DEFAULT_FROM_EMAIL")
+                print("in your .env file to enable email features.")
+                print("=" * 60)
 
     def _validate_secret_key(self) -> None:
         """Validate that SECRET_KEY is properly configured"""

@@ -9,8 +9,20 @@ from contextlib import asynccontextmanager
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 import logging
+import shutil
 from pathlib import Path
 from dotenv import load_dotenv
+
+# ── Auto-copy .env.example to .env if missing ──
+env_path = Path(".env")
+env_example_path = Path(".env.example")
+if not env_path.exists() and env_example_path.exists():
+    shutil.copy2(str(env_example_path), str(env_path))
+    print("=" * 60)
+    print("INFO: Created .env from .env.example")
+    print("TIP: Generate a secure SECRET_KEY via: python setup.py")
+    print("=" * 60)
+
 load_dotenv()
 from app.core import settings
 from app.core.database import SessionLocal
