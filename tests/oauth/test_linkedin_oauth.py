@@ -353,7 +353,7 @@ class TestAuthenticateOrCreateUser:
         """Should generate unique username when base name exists"""
         mock_data = {
             "sub": "unique_un_id",
-            "email": "testuser@example.com",  # Same as test_user's email local part
+            "email": "testuser@different.com",  # Local part generates "testuser", but email doesn't match existing user
             "email_verified": True,
             "given_name": "Test",
             "family_name": "User",

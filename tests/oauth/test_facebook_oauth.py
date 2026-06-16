@@ -211,40 +211,40 @@ class TestGetFacebookUserInfo:
     async def test_custom_redirect_uri(self, db):
         """Should pass custom redirect URI to Facebook"""  # noqa: F811
         custom_uri = "http://custom/callback"
-        captured_params = {}
+        captured_first_params = {}
 
         async def mock_get(url, *args, **kwargs):
-            nonlocal captured_params
-            captured_params = kwargs.get("params", {})
+            nonlocal captured_first_params
             if "oauth/access_token" in url:
+                captured_first_params = kwargs.get("params", {})
                 return HttpxResponse(200, json={"access_token": "mock_token", "expires_in": 5184000})
             return HttpxResponse(200, json={"id": "test", "email": "test@test.com"})
 
         with patch("httpx.AsyncClient.get", side_effect=mock_get):
             await FacebookOAuthService.get_facebook_user_info("code", custom_uri)
 
-        assert captured_params.get("redirect_uri") == custom_uri
+        assert captured_first_params.get("redirect_uri") == custom_uri
 
     @pytest.mark.asyncio
     async def test_userinfo_requests_correct_fields(self):
         """Should request specific fields from Facebook Graph API"""
-        captured_params = {}
+        captured_userinfo_params = {}
 
         async def mock_get(url, *args, **kwargs):
-            nonlocal captured_params
-            captured_params = kwargs.get("params", {})
+            nonlocal captured_userinfo_params
             if "oauth/access_token" in url:
                 return HttpxResponse(200, json={"access_token": "mock_token", "expires_in": 5184000})
+            captured_userinfo_params = kwargs.get("params", {})
             return HttpxResponse(200, json={"id": "test"})
 
         with patch("httpx.AsyncClient.get", side_effect=mock_get):
             await FacebookOAuthService.get_facebook_user_info("code")
 
-        # Second call should have fields param
-        assert "fields" in str(captured_params.get("fields", ""))
-        assert "id" in captured_params.get("fields", "")
-        assert "email" in captured_params.get("fields", "")
-        assert "picture" in captured_params.get("fields", "")
+        # Userinfo call should have fields param
+        assert "fields" in captured_userinfo_params
+        assert "id" in captured_userinfo_params["fields"]
+        assert "email" in captured_userinfo_params["fields"]
+        assert "picture" in captured_userinfo_params["fields"]
 
 
 # =============================================================
@@ -436,7 +436,7 @@ class TestAuthenticateOrCreateUser:
         """Should generate unique username when base name exists"""
         mock_data = {
             "id": "unique_fb_id",
-            "email": "testuser@example.com",
+            "email": "testuser@different.com",  # Local part generates "testuser", but email doesn't match existing user
             "first_name": "Test",
             "last_name": "User",
             "name": "Test User",
