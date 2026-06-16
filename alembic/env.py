@@ -21,6 +21,7 @@ from app.models.email_verification_token import EmailVerificationToken
 from app.models.waitlist import Waitlist
 from app.models.notification import Notification, NotificationPreference
 from app.models.audit_log import AuditLog
+from app.models.payment import Payment
 
 # this is the Alembic Config object, which provides
 # access to the .ini file in use.

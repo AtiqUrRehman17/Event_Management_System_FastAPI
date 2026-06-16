@@ -13,7 +13,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 load_dotenv()
 from app.core import settings
-from app.core.database import engine, Base, SessionLocal
+from app.core.database import SessionLocal
 from app.core.seed import seed_all
 from app.routers import (
     auth_router,
@@ -38,12 +38,19 @@ from app.services.waitlist_service import WaitlistService
 from app.models.email_verification_token import EmailVerificationToken
 from app.models.password_reset_token import PasswordResetToken
 from app.models.token_blacklist import TokenBlacklist
+from alembic.config import Config
+from alembic import command
 from datetime import timedelta
 
 logger = logging.getLogger(__name__)
 
-# Create database tables
-Base.metadata.create_all(bind=engine)
+
+def run_migrations():
+    """Run pending Alembic migrations to keep the database schema up to date"""
+    alembic_cfg = Config("alembic.ini")
+    alembic_cfg.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+    command.upgrade(alembic_cfg, "head")
+    logger.info("Database migrations up to date")
 
 # Create upload directories if they don't exist
 uploads_dir = Path("uploads")
@@ -146,6 +153,9 @@ async def lifespan(app: FastAPI):
     """Application lifespan manager"""
     # ---- STARTUP ----
     logger.info("Starting Event Management System...")
+
+    logger.info("Running database migrations...")
+    run_migrations()
 
     logger.info("Seeding database...")
     db = SessionLocal()
