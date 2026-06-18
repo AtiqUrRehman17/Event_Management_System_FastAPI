@@ -1,6 +1,6 @@
 # Event Management System
 
-A comprehensive Event Management System built with **FastAPI**, featuring JWT authentication, OAuth integrations (Google, LinkedIn & Facebook), role-based access control, email verification, password reset, booking management, waitlist functionality, invoice generation, notifications, admin dashboard, audit logs, and a complete server-side rendered frontend using Jinja2 templates.
+A comprehensive Event Management System built with **FastAPI**, featuring JWT authentication, OAuth integrations (Google, LinkedIn & Facebook), role-based access control, email verification, password reset, booking management, payment processing, waitlist functionality, invoice generation, notifications, admin dashboard, audit logs, and a complete server-side rendered frontend using Jinja2 templates.
 
 ---
 
@@ -12,9 +12,12 @@ A comprehensive Event Management System built with **FastAPI**, featuring JWT au
 - [Frontend Architecture](#frontend-architecture)
 - [Prerequisites](#prerequisites)
 - [Installation](#installation)
+- [Environment Setup](#environment-setup)
+- [Running the Application](#running-the-application)
 - [Database Migrations](#database-migrations)
 - [OAuth Setup Guides](#oauth-setup-guides)
 - [API Endpoints](#api-endpoints)
+- [Payment System](#payment-system)
 - [Background Jobs](#background-jobs)
 - [Security Features](#security-features)
 - [Error Responses](#error-responses)
@@ -26,71 +29,80 @@ A comprehensive Event Management System built with **FastAPI**, featuring JWT au
 
 ## Features
 
-### 🔐 Authentication & Authorization
+### Authentication & Authorization
 
-- **JWT Authentication** — Access and refresh tokens with expiry handling
-- **Role-Based Access Control** — Admin and User roles with different permissions
-- **Email Verification** — Verify user emails during registration
-- **Password Reset Flow** — Forgot password with email reset links
-- **Google OAuth Login** — Sign in with Google account
-- **LinkedIn OAuth Login** — Sign in with LinkedIn account
-- **Facebook OAuth Login** — Sign in with Facebook account
-- **Token Blacklist** — Secure logout functionality
+- **JWT Authentication** — Access tokens (30 min) and refresh tokens (7 days) with automatic expiry handling
+- **Role-Based Access Control** — Admin and User roles with strict permission enforcement
+- **Email Verification** — Token-based email verification during registration (auto-disabled in dev mode when SMTP unconfigured)
+- **Password Reset Flow** — Forgot password with email token
+- **Google OAuth Login** — Sign in with Google account via OpenID Connect
+- **LinkedIn OAuth Login** — Sign in with LinkedIn account via OpenID Connect
+- **Facebook OAuth Login** — Sign in with Facebook account via Facebook Login
+- **Token Blacklist** — Secure logout with token invalidation
+- **Refresh Token Rotation** — Old refresh tokens blacklisted on each refresh
 
-### 👤 User Management
+### User Management
 
 - User registration and login
 - Profile update (first name, last name, email, phone, bio, timezone)
-- Password change functionality
+- Password change with current password verification
 - Account activation/deactivation (Admin only)
-- Profile picture upload support
+- Avatar upload support
 
-### 📅 Event Management
+### Event Management
 
 - Create, read, update, delete events (Admin only)
-- Event fields: title, description, location, date/time, total seats, available seats, price, status, image URL
-- Event statuses: `UPCOMING`, `COMPLETED`, `CANCELLED`
-- Soft delete — Events can be soft-deleted and restored
-- Search and filter events (by title, category, location, price range, date range, status)
-- Event image upload support
-- Pagination support for event lists
+- Fields: title, description, location, date/time, total seats, available seats, price, status, image
+- Statuses: `UPCOMING`, `COMPLETED`, `CANCELLED`
+- Soft delete with restore capability
+- Search and filter (by title, category, location, price range, date range, status)
+- Event image upload
+- Pagination with metadata
 
-### 🎟️ Booking System
+### Booking System
 
-- Book events with seat availability validation
-- **Concurrency-safe booking** — Row-level locking prevents overselling
+- Book events with real-time seat availability validation
+- **Concurrency-safe** — Row-level locking prevents overselling
 - Automatic seat count management (decrease on booking, increase on cancellation)
-- View user's own bookings
+- View own bookings with categorized tabs (All / Active / Cancelled)
 - Cancel own bookings (users) or any booking (admin)
-- Booking history with categorized views (upcoming, past, cancelled)
-- Booking statistics and analytics
-- Export bookings to CSV and PDF
+- Booking history, statistics, and analytics
+- Export to CSV and PDF
 
-### 📊 Admin Dashboard
+### Payment System
 
-- Complete dashboard statistics (users, events, bookings, revenue)
-- User activity tracking and analytics
-- Event performance metrics
+- Initiate payments for bookings
+- Simulate successful/failed payments (development mode)
+- Full refund processing with audit trail
+- Payment status tracking (pending, completed, failed, refunded)
+- View payment by ID or by booking
+- List own payments with pagination
+- Admin can view all payments
+
+### Admin Dashboard
+
+- Dashboard statistics (users, events, bookings, revenue)
+- User activity tracking
+- Event performance analytics
 - Booking reports with date range filters
-- Revenue reports by period (today, week, month, year, all-time)
+- Revenue reports (today, week, month, year, all-time)
 - CSV export for reports
 
-### 📝 Audit Logs
+### Audit Logs
 
-- Track all important actions (user login, profile updates, event changes, bookings)
+- Track all important actions (login, registration, profile updates, events, bookings, payments)
 - IP address and user agent tracking
-- Filterable logs by user, action, category, date range
+- Filterable logs (by user, action, category, date range)
 - Audit trail for specific users and entities
-- Compliance and security forensics
 
-### 🔔 Notification System
+### Notification System
 
 - Email and in-app notifications
-- Notification types: booking confirmation, cancellation, payment updates, event reminders, waitlist promotions
+- Types: booking confirmation, cancellation, payment updates, event reminders, waitlist promotions
 - User-configurable notification preferences
-- Unread notification count and marking as read
+- Unread notification count and mark-as-read
 
-### ⏳ Waitlist Functionality
+### Waitlist Functionality
 
 - Join waitlist when events are sold out
 - Automatic position management
@@ -98,40 +110,40 @@ A comprehensive Event Management System built with **FastAPI**, featuring JWT au
 - 48-hour confirmation window
 - Automatic expiration handling
 
-### 📄 Invoice Generation
+### Invoice Generation
 
 - Unique invoice numbers (`INV-YYYYMM-XXXXXX`)
-- PDF invoice download
+- PDF invoice download with QR code for verification
 - Tax calculation support
-- QR code for verification
 - Payment status tracking
 
-### 🗂️ Category Management
+### Category Management
 
-- Create, read, update, delete event categories (Admin only)
-- **Category hierarchy** — Parent-child relationships
-- **Category icons and colors** — Visual distinction
-- **Category images** — Upload category thumbnails
-- Soft delete categories (`is_active` flag)
+- Create, read, update, delete categories (Admin only)
+- **Hierarchy** — Parent-child relationships with path tracking
+- **Icons and colors** — Visual distinction
+- **Category images** — Upload thumbnails
+- Soft delete (`is_active` flag)
 - Popular categories endpoint
 
-### 🖼️ File Upload
+### File Upload
 
 - Event image upload
 - Category image upload
 - User avatar upload
 - Image validation (type, size)
-- Image optimization and thumbnail generation
+- Organized upload directories
 
-### ⚙️ Additional Features
+### Additional Features
 
-- Pagination for all list endpoints
-- Background scheduler for event status auto-updates
-- Token cleanup jobs (blacklist, reset tokens, verification tokens, waitlist)
-- Email notifications (verification, password reset, booking confirmations, waitlist)
-- Standardized API responses
-- Comprehensive error handling
-- Database migrations with Alembic
+- Pagination with metadata for all list endpoints
+- Background scheduler (event status updates, token cleanup, waitlist cleanup)
+- Alembic migrations auto-run on startup
+- Auto-copy `.env.example` → `.env` when missing
+- Smart dev defaults (email verification auto-disabled when SMTP unconfigured)
+- Graceful SMTP fallback (logs warning instead of crashing)
+- Standardized API responses (`success`, `data`, `message`, `meta`)
+- Comprehensive error handling with custom exceptions
 
 ---
 
@@ -152,6 +164,8 @@ A comprehensive Event Management System built with **FastAPI**, featuring JWT au
 | Pillow       | 10.1.0   | Image processing         |
 | ReportLab    | 4.0.4    | PDF generation           |
 | Uvicorn      | 0.24.0   | ASGI server              |
+| Jinja2       | 3.1.2    | Server-side templates    |
+| Bootstrap    | 5.3.2    | CSS framework (via CDN)  |
 
 ---
 
@@ -161,311 +175,233 @@ A comprehensive Event Management System built with **FastAPI**, featuring JWT au
 event-management-system/
 ├── app/
 │   ├── __init__.py
-│   ├── main.py                          # FastAPI application entry point
+│   ├── main.py                              # FastAPI app entry, lifespan, routers
 │   │
-│   ├── core/                            # Core configuration
+│   ├── core/                                # Core configuration
 │   │   ├── __init__.py
-│   │   ├── config.py                    # App settings & environment variables
-│   │   ├── database.py                  # Database connection & session
-│   │   ├── enums.py                     # UserRole, EventStatus, BookingStatus
-│   │   ├── exceptions.py                # Custom exception classes
-│   │   ├── security.py                  # JWT token creation & verification
-│   │   └── seed.py                      # Default admin user seeding
+│   │   ├── config.py                        # Settings via pydantic-settings
+│   │   ├── database.py                      # Engine & session factory
+│   │   ├── enums.py                         # UserRole, EventStatus, BookingStatus, etc.
+│   │   ├── exceptions.py                    # Custom HTTP exceptions
+│   │   ├── security.py                      # JWT create/decode helpers
+│   │   └── seed.py                          # Admin user auto-seeding
 │   │
-│   ├── models/                          # SQLAlchemy ORM models
+│   ├── models/                              # SQLAlchemy ORM models
 │   │   ├── __init__.py
-│   │   ├── user.py                      # User model (with OAuth fields)
-│   │   ├── event.py                     # Event model (with soft delete)
-│   │   ├── booking.py                   # Booking model
-│   │   ├── category.py                  # Category model (with hierarchy)
-│   │   ├── token_blacklist.py           # Token blacklist model
-│   │   ├── password_reset_token.py      # Password reset tokens
-│   │   ├── email_verification_token.py  # Email verification tokens
-│   │   ├── waitlist.py                  # Waitlist model
-│   │   ├── notification.py              # Notification models
-│   │   └── audit_log.py                 # Audit log model
+│   │   ├── user.py                          # User (username, email, role, OAuth fields)
+│   │   ├── event.py                         # Event (soft delete, status)
+│   │   ├── booking.py                       # Booking (seats, price, status)
+│   │   ├── payment.py                       # Payment (amount, status, refund)
+│   │   ├── category.py                      # Category (hierarchy via parent_id)
+│   │   ├── token_blacklist.py               # Revoked JWT tokens
+│   │   ├── password_reset_token.py          # Password reset tokens
+│   │   ├── email_verification_token.py      # Email verification tokens
+│   │   ├── waitlist.py                      # Waitlist entry (position, status)
+│   │   ├── notification.py                  # Notification + NotificationPreference
+│   │   └── audit_log.py                     # Audit log entries
 │   │
-│   ├── schemas/                         # Pydantic models
+│   ├── schemas/                             # Pydantic request/response schemas
 │   │   ├── __init__.py
-│   │   ├── auth.py                      # Authentication schemas
-│   │   ├── user.py                      # User schemas
-│   │   ├── event.py                     # Event schemas
-│   │   ├── booking.py                   # Booking schemas
-│   │   ├── category.py                  # Category schemas
-│   │   ├── notification.py              # Notification schemas
-│   │   ├── audit.py                     # Audit log schemas
-│   │   ├── admin.py                     # Admin dashboard schemas
-│   │   ├── invoice.py                   # Invoice schemas
-│   │   └── waitlist.py                  # Waitlist schemas
+│   │   ├── auth.py                          # RegisterRequest, LoginRequest, etc.
+│   │   ├── user.py                          # UserUpdate, UserResponse
+│   │   ├── event.py                         # EventCreate, EventUpdate, EventResponse
+│   │   ├── booking.py                       # BookingCreate, BookingResponse
+│   │   ├── payment.py                       # PaymentInitiate, PaymentResponse
+│   │   ├── category.py                      # CategoryCreate, CategoryResponse
+│   │   ├── notification.py                  # NotificationResponse, Preferences
+│   │   ├── audit.py                         # AuditLogResponse
+│   │   ├── admin.py                         # DashboardStats, ReportResponse
+│   │   ├── invoice.py                       # InvoiceResponse
+│   │   └── waitlist.py                      # WaitlistResponse
 │   │
-│   ├── routers/                         # API route handlers
+│   ├── routers/                             # API route handlers
 │   │   ├── __init__.py
-│   │   ├── auth.py                      # Login, register, refresh, logout
-│   │   ├── users.py                     # User profile & management
-│   │   ├── events.py                    # Event CRUD & search
-│   │   ├── bookings.py                  # Booking operations
-│   │   ├── categories.py                # Category management
-│   │   ├── oauth.py                     # Google, LinkedIn, Facebook OAuth
-│   │   ├── invoice.py                   # Invoice generation
-│   │   ├── waitlist.py                  # Waitlist management
-│   │   ├── notifications.py             # Notification endpoints
-│   │   ├── admin.py                     # Admin dashboard
-│   │   ├── audit.py                     # Audit log endpoints
-│   │   └── upload.py                    # File upload endpoints
+│   │   ├── auth.py                          # POST register, login, refresh, logout, verify
+│   │   ├── oauth.py                         # GET google/linkedin/facebook login & callback
+│   │   ├── users.py                         # GET/PUT me, admin user management
+│   │   ├── events.py                        # CRUD + filters, restore, deleted
+│   │   ├── bookings.py                      # CRUD, cancel, export, stats
+│   │   ├── payments.py                      # Initiate, simulate, refund, list
+│   │   ├── categories.py                    # CRUD, tree, popular
+│   │   ├── waitlist.py                      # Join, leave, position, confirm
+│   │   ├── notifications.py                 # List, count, mark-read, preferences
+│   │   ├── invoice.py                       # GET json/pdf by booking
+│   │   ├── admin.py                         # Dashboard stats, reports, analytics
+│   │   ├── audit.py                         # Logs, summary, user/entity trail
+│   │   └── upload.py                        # Event/category/avatar image upload
 │   │
-│   ├── services/                        # Business logic layer
+│   ├── services/                            # Business logic layer
 │   │   ├── __init__.py
-│   │   ├── auth_service.py              # Authentication logic
-│   │   ├── user_service.py              # User management logic
-│   │   ├── event_service.py             # Event management logic
-│   │   ├── booking_service.py           # Booking management logic
-│   │   ├── category_service.py          # Category management logic
-│   │   ├── email_service.py             # Email sending service
-│   │   ├── oauth_service.py             # Google OAuth logic
-│   │   ├── linkedin_oauth_service.py    # LinkedIn OAuth logic
-│   │   ├── facebook_oauth_service.py    # Facebook OAuth logic
-│   │   ├── invoice_service.py           # Invoice generation logic
-│   │   ├── waitlist_service.py          # Waitlist logic
-│   │   ├── notification_service.py      # Notification logic
-│   │   ├── admin_service.py             # Admin dashboard logic
-│   │   └── audit_service.py             # Audit log logic
+│   │   ├── auth_service.py                  # Registration, login, email verification, password reset
+│   │   ├── oauth_service.py                 # Google OAuth flow
+│   │   ├── linkedin_oauth_service.py        # LinkedIn OAuth flow
+│   │   ├── facebook_oauth_service.py        # Facebook OAuth flow
+│   │   ├── user_service.py                  # Profile CRUD
+│   │   ├── event_service.py                 # Event CRUD, status updates
+│   │   ├── booking_service.py               # Booking, cancellation, export
+│   │   ├── payment_service.py               # Initiate, simulate, refund, query
+│   │   ├── category_service.py              # Category CRUD, hierarchy
+│   │   ├── email_service.py                 # SMTP + Postmark email sending
+│   │   ├── invoice_service.py               # PDF generation via ReportLab
+│   │   ├── waitlist_service.py              # Join, notify, confirm, cleanup
+│   │   ├── notification_service.py          # Create, fetch, mark-read
+│   │   ├── admin_service.py                 # Dashboard stats & reports
+│   │   └── audit_service.py                 # Log actions, query logs
 │   │
-│   ├── dependencies/                    # FastAPI dependencies
+│   ├── dependencies/                        # FastAPI dependency injection
 │   │   ├── __init__.py
-│   │   ├── auth.py                      # get_current_user, get_current_admin
-│   │   └── db.py                        # get_db session
+│   │   ├── auth.py                          # get_current_user, get_current_admin
+│   │   └── db.py                            # get_db session
 │   │
-│   ├── pagination/                      # Pagination module
+│   ├── pagination/                          # Reusable pagination
 │   │   ├── __init__.py
-│   │   └── pagination.py                # PaginationParams, paginate_query
+│   │   └── pagination.py                    # PaginationParams, paginate_query
 │   │
-│   └── utils/                           # Utility functions
-│       ├── __init__.py
-│       ├── auth_utils.py                # Password hashing & verification
-│       ├── response.py                  # Standardized API responses
-│       ├── error_handlers.py            # Global exception handlers
-│       ├── validators.py                # Input validation functions
-│       ├── datetime_utils.py            # Datetime utilities
-│       └── image_upload.py              # Image upload utilities
-│   ├── templates/                    # HTML templates
-│   │   ├── admin_dashboard.html      # Admin dashboard page
-│   │   ├── base.html                 # Base template (navigation, footer)
-│   │   ├── event_details.html        # Single event details page
-│   │   ├── event.html                # Events listing page
-│   │   ├── home.html                 # Homepage
-│   │   ├── login.html                # Login page
-│   │   ├── profile.html              # User profile page
-│   │   ├── register.html             # Registration page
-│   │   └── bookings.html             # User bookings page
+│   ├── utils/                               # Utility functions
+│   │   ├── __init__.py
+│   │   ├── auth_utils.py                    # hash_password, verify_password
+│   │   ├── datetime_utils.py                # get_current_utc, format helpers
+│   │   ├── response.py                      # success_response, error_response, paginated_response
+│   │   ├── error_handlers.py                # Global exception → JSON handler
+│   │   ├── validators.py                    # password_strength, validate_email, etc.
+│   │   └── image_upload.py                  # Save, validate, delete images
 │   │
-│   └── static/                       # Static assets
+│   ├── templates/                           # Jinja2 server-side templates
+│   │   ├── base.html                        # Base layout (navbar, footer, auth state)
+│   │   ├── home.html                        # Landing page with hero, stats, categories
+│   │   ├── events.html                      # Event listing with search/filter/pagination
+│   │   ├── event_detail.html                # Single event with booking sidebar
+│   │   ├── login.html                       # Login form + OAuth buttons
+│   │   ├── register.html                    # Registration with password strength meter
+│   │   ├── profile.html                     # Profile edit, avatar, password change
+│   │   ├── my_bookings.html                 # Bookings with tabs (All/Active/Cancelled)
+│   │   ├── admin_dashboard.html             # Admin stats, charts, tables
+│   │   ├── verify_email.html                # Email verification status
+│   │   ├── resend_verification.html         # Resend verification email
+│   │   ├── oauth_callback.html              # OAuth callback handler
+│   │   └── errors/
+│   │       └── 404.html                     # Custom 404 page
+│   │
+│   └── static/                              # Static assets
 │       ├── css/
-│       │   └── style.css             # Main stylesheet
+│       │   └── style.css                    # Custom styles (538 lines)
 │       └── js/
-│           └── main.js               # JavaScript for frontend
-tests/
-├── __init__.py
-├── conftest.py                         # Shared fixtures and configuration
+│           └── main.js                      # Core JS module (API calls, auth, UI)
 │
-├── unit/                               # Unit tests (isolated functions)
+├── tests/
 │   ├── __init__.py
-│   ├── test_auth_utils.py              # Password hashing & verification
-│   ├── test_datetime_utils.py          # Datetime helper functions
-│   ├── test_pagination.py              # Pagination logic
-│   ├── test_response.py                # API response formatters
-│   ├── test_security.py                # JWT token functions
-│   └── test_validator.py               # Input validation functions
+│   ├── conftest.py                          # Shared fixtures (in-memory SQLite, client, users)
+│   │
+│   ├── unit/                                # Unit tests (isolated, fast)
+│   │   ├── __init__.py
+│   │   ├── test_auth_utils.py               # Password hashing & verification
+│   │   ├── test_datetime_utils.py           # Datetime helpers
+│   │   ├── test_pagination.py               # Pagination logic
+│   │   ├── test_response.py                 # Response formatters
+│   │   ├── test_security.py                 # JWT creation/validation
+│   │   └── test_validators.py               # Input validators
+│   │
+│   ├── oauth/                               # OAuth service tests (mocked HTTP)
+│   │   ├── __init__.py
+│   │   ├── test_google_oauth.py             # Google OAuth flow tests
+│   │   ├── test_linkedin_oauth.py           # LinkedIn OAuth flow tests
+│   │   └── test_facebook_oauth.py           # Facebook OAuth flow tests
+│   │
+│   ├── integration/                         # Integration tests (real API calls)
+│   │   ├── __init__.py
+│   │   ├── test_admin.py                    # Admin dashboard endpoints
+│   │   ├── test_audit.py                    # Audit log endpoints
+│   │   ├── test_auth.py                     # Authentication endpoints
+│   │   ├── test_bookings.py                 # Booking endpoints
+│   │   ├── test_categories.py               # Category CRUD
+│   │   ├── test_events.py                   # Event CRUD
+│   │   ├── test_invoices.py                 # Invoice endpoints
+│   │   ├── test_notifications.py            # Notification endpoints
+│   │   ├── test_payments.py                 # Payment endpoints (28 tests)
+│   │   ├── test_users.py                    # User management endpoints
+│   │   └── test_waitlist.py                 # Waitlist endpoints
+│   │
+│   └── fixtures/                            # Test data factories
+│       ├── __init__.py
+│       ├── user_fixtures.py                 # User factory
+│       ├── category_fixtures.py             # Category factory
+│       ├── event_fixtures.py                # Event factory
+│       └── booking_fixtures.py              # Booking factory
 │
-├── integration/                        # Integration tests (API endpoints)
-│   ├── __init__.py
-│   ├── test_admin.py                   # Admin dashboard endpoints
-│   ├── test_audit.py                   # Audit log endpoints
-│   ├── test_auth.py                    # Authentication endpoints
-│   ├── test_categories.py              # Category CRUD endpoints
-│   ├── test_bookings.py                # Booking endpoints
-│   ├── test_events.py                  # Event CRUD endpoints
-│   ├── test_invoices.py                # Invoice endpoints
-│   ├── test_notifications.py           # Notification endpoints
-│   ├── test_users.py                   # User management endpoints
-│   └── test_waitlist.py                # Waitlist endpoints
-│
-└── fixtures/                           # Test data fixtures
-    ├── __init__.py
-    ├── booking_fixtures.py             # Booking test data
-    ├── category_fixtures.py            # Category test data
-    ├── events_fixtures.py              # Event test data
-    └── users_fixtures.py               # User test data
-│
-├── alembic/                             # Database migrations
+├── alembic/                                 # Database migrations
 │   ├── versions/
-│   ├── env.py
-│   └── script.py.mako
+│   │   └── c5fb60420995_initial_schema.py   # Full initial schema migration
+│   ├── env.py                               # Alembic environment config
+│   └── script.py.mako                       # Migration template
 │
-├── uploads/                             # Uploaded files
+├── uploads/                                 # Uploaded files
 │   ├── events/
 │   ├── categories/
 │   └── avatars/
 │
-├── .env                                 # Environment variables
-├── .env.example                         # Example environment variables
-├── .gitignore                           # Git ignore file
-├── requirements.txt                     # Project dependencies
-├── alembic.ini                          # Alembic configuration
-└── README.md                            # This file
+├── .env                                     # Local environment (git-ignored)
+├── .env.example                             # Environment template
+├── .env.test                                # Test environment variables
+├── .gitignore
+├── pytest.ini                               # Pytest markers & config
+├── requirements.txt                         # Python dependencies
+├── alembic.ini                              # Alembic configuration
+├── run.py                                   # App entry point
+├── setup.py                                   # env setup
+└── README.md                                # This file
 ```
 
 ---
 
 ## Frontend Architecture
 
-The project includes a complete **server-side rendered (SSR) frontend** built with **Jinja2 templates**, **Bootstrap 5**, and **Vanilla JavaScript**. The frontend communicates with the FastAPI backend via REST API calls.
-
-### Frontend Technology Stack
-
-| Technology | Version | Purpose |
-|------------|---------|---------|
-| Jinja2 | 3.1.2 | Server-side template engine |
-| Bootstrap | 5.3.2 | CSS framework (via CDN) |
-| Font Awesome | 6.5.1 | Icon library (via CDN) |
-| Google Fonts | — | Inter font family (via CDN) |
-| Vanilla JavaScript | ES6+ | Client-side logic (no build step) |
+The project includes a complete **server-side rendered (SSR) frontend** built with **Jinja2 templates**, **Bootstrap 5**, and **Vanilla JavaScript**. No separate build step is required.
 
 ### Template Structure (`app/templates/`)
 
 ```
 templates/
-├── base.html                 # Base layout with navbar, footer, auth state
-├── home.html                 # Landing page with hero, stats, categories, featured events
-├── events.html               # Events listing with search, filters, pagination
-├── event_detail.html         # Single event view with booking sidebar
-├── login.html                # Login page with OAuth buttons
-├── resend_verification.html                # resend verification
-├── oauth_callback.html                # oauth
-├── register.html             # Registration page with password strength meter
-├── profile.html              # User profile management (avatar, password, info)
-├── my_bookings.html          # User's bookings with tabs (All/Active/Cancelled)
-├── admin_dashboard.html      # Admin dashboard with stats, charts, recent activity
-├── verify_email.html         # Email verification page
+├── base.html                     # Base layout with navbar, footer, auth state
+├── home.html                     # Landing page with hero, stats, categories, featured events
+├── events.html                   # Events listing with search, filters, pagination
+├── event_detail.html             # Single event view with booking sidebar
+├── login.html                    # Login page with OAuth buttons
+├── register.html                 # Registration with password strength meter
+├── profile.html                  # User profile (avatar, info, password)
+├── my_bookings.html              # Bookings with tabs (All/Active/Cancelled)
+├── admin_dashboard.html          # Admin stats, recent activity, reports
+├── verify_email.html             # Email verification page
+├── resend_verification.html      # Resend verification email form
+├── oauth_callback.html           # OAuth callback handler page
 └── errors/
-    └── 404.html              # Custom 404 error page
-```
-
-### Static Assets (`app/static/`)
-
-```
-static/
-├── css/
-│   └── style.css             # Custom styles (538 lines) extending Bootstrap
-└── js/
-    └── main.js               # Core JavaScript module (386 lines)
+    └── 404.html                  # Custom 404 error page
 ```
 
 ### Core JavaScript Module (`app/static/js/main.js`)
 
-The `main.js` file provides a complete client-side application framework:
+The `main.js` file provides:
 
-#### Authentication & Token Management
-- **Token Storage**: Access/refresh tokens stored in `localStorage`
-- **Auto-refresh**: Automatic token refresh on 401 responses
-- **Auth State**: `checkAuthStatus()` updates navbar UI based on login state
-- **Logout**: Secure logout with server-side token blacklisting
+- **Token Management** — Store access/refresh tokens in `localStorage`, auto-refresh on 401
+- **Auth State** — `checkAuthStatus()` updates navbar (login/register vs profile/admin/logout)
+- **API Layer** — `apiCall(url, options)` unified fetch wrapper with auth headers, automatic retry
+- **UI Utilities** — `showAlert()` toast notifications, `showLoading/showEmpty/showError()`, date/currency formatting, debounce
+- **Page-Specific Logic** — Inline `{% block extra_js %}` per template
 
-#### API Communication Layer
-- **`apiCall(url, options)`**: Unified fetch wrapper with auth headers
-- **Automatic retry**: Retries failed requests after token refresh
-- **Error handling**: Network error fallbacks and user-friendly messages
+### Frontend Pages
 
-#### UI Utilities
-- **`showAlert(message, type, duration)`**: Toast-style notifications with icons
-- **`showLoading/showEmpty/showError(containerId)`**: Standardized loading states
-- **Date formatting**: `formatDate()`, `formatDateShort()`, `formatDateRelative()`
-- **Currency/Number formatting**: `formatCurrency()`, `formatNumber()`
-- **URL helpers**: `getUrlParam()`, `setUrlParam()` for query string manipulation
-- **Debounce**: `debounce(func, wait)` for search inputs
+| Route | Template | Description | Auth |
+|-------|----------|-------------|------|
+| `/` | `home.html` | Landing page with hero, stats, categories, featured events | No |
+| `/events` | `events.html` | Events listing with search, filters, pagination | No |
+| `/events/{id}` | `event_detail.html` | Event details with booking sidebar, waitlist | No* |
+| `/login` | `login.html` | Login form with Google/LinkedIn/Facebook OAuth buttons | No |
+| `/register` | `register.html` | Registration with password strength meter | No |
+| `/profile` | `profile.html` | Profile edit, avatar upload, password change | Yes |
+| `/my-bookings` | `my_bookings.html` | User's bookings with filter tabs | Yes |
+| `/admin` | `admin_dashboard.html` | Admin dashboard with stats & analytics | Admin |
+| `/verify-email` | `verify_email.html` | Email verification status page | No |
 
-#### Page-Specific JavaScript (Inline in Templates)
-
-Each template includes page-specific logic in `{% block extra_js %}`:
-
-| Page | Key Features |
-|------|--------------|
-| **home.html** | Loads categories & featured events, hero search, admin stats |
-| **events.html** | Search/filter (category, price range), pagination, URL state sync |
-| **event_detail.html** | Seat selector, price calculator, booking, waitlist join |
-| **my_bookings.html** | Tab filtering, cancel booking, summary cards |
-| **admin_dashboard.html** | Stats cards, recent bookings table, top events, recent users |
-| **profile.html** | Avatar upload, profile update, password change, password strength |
-| **register.html** | Password strength meter, real-time validation |
-| **login.html** | OAuth redirect handlers, form validation |
-
-### Base Template (`base.html`) Features
-
-- **Responsive Navbar**: Collapsible mobile menu with user dropdown
-- **Auth-Aware UI**: Shows login/register when logged out; profile/bookings/admin when logged in
-- **Role-Based Links**: Admin dashboard link only for admin users
-- **Global Alert Container**: Centralized toast notifications
-- **CDN Resources**: Bootstrap, Font Awesome, Google Fonts loaded via CDN
-- **Auto Auth Check**: Runs `checkAuthStatus()` on every page load
-
-### CSS Architecture (`app/static/css/style.css`)
-
-Custom styles (538 lines) organized into sections:
-
-1. **CSS Variables** — Colors, shadows, transitions, fonts
-2. **Global Reset** — Box-sizing, typography, scrollbar styling
-3. **Navbar** — Brand, links, dropdown animations
-4. **Cards** — Hover effects, event/category card variants
-5. **Buttons** — Primary/secondary variants, loading states
-6. **Forms** — Input styling, focus states, validation feedback
-7. **Hero Section** — Gradient background with SVG pattern
-8. **Badges/Alerts/Tables** — Component customizations
-9. **Pagination/Progress** — Custom pagination, progress bars
-10. **Auth Pages** — Centered card layouts
-11. **Dashboard Stats** — Border-left accent cards
-12. **Responsive** — Breakpoints at 768px and 576px
-13. **Print Styles** — Hides UI elements for printing
-
-### Key Frontend Features
-
-#### 1. **Event Discovery**
-- Homepage: Hero search, category grid, featured events carousel
-- Events page: Full-text search, category filter, price range filter, pagination
-- Event detail: Image gallery, seat availability progress bar, real-time price calculation
-
-#### 2. **Booking Flow**
-- Seat selector with +/- buttons (max 10 or available seats)
-- Live total price calculation
-- One-click booking with loading state
-- Waitlist join when sold out
-- Booking history with status tabs (All/Active/Cancelled)
-- Cancel booking with confirmation
-
-#### 3. **Authentication UX**
-- Login/Register with validation
-- Password strength meter (visual progress bar)
-- OAuth buttons (Google, LinkedIn, Facebook)
-- Email verification page
-- Forgot/Reset password flow
-
-#### 4. **User Profile**
-- Avatar upload with preview
-- Profile info editing (name, email, phone, bio, timezone)
-- Password change with current password verification
-- Notification preferences toggle
-
-#### 5. **Admin Dashboard**
-- 8 stat cards (users, events, bookings, revenue + secondary metrics)
-- Recent bookings table with status badges
-- Top events by revenue/bookings with fill rate
-- Recent users with role badges and booking counts
-- Responsive grid layout
-
-#### 6. **Responsive Design**
-- Mobile-first approach with Bootstrap 5 grid
-- Collapsible navbar on mobile
-- Stacked cards on small screens
-- Touch-friendly buttons and inputs
-- Print-optimized styles
+*\*Booking requires authentication.*
 
 ### Frontend-Backend Integration
 
@@ -477,44 +413,6 @@ Custom styles (538 lines) organized into sections:
 | `apiCall('/api/v1/admin/dashboard/stats')` | `GET /api/v1/admin/dashboard/stats` |
 | `apiCall('/api/v1/upload/avatar', {method: 'POST', body: FormData})` | `POST /api/v1/upload/avatar` |
 
-### Running the Frontend
-
-The frontend is served **automatically** by FastAPI:
-
-```bash
-# Start the server (serves both API and frontend)
-uvicorn app.main:app --reload
-
-# Access points:
-# - Frontend Homepage:     http://localhost:8000/
-# - Events Listing:        http://localhost:8000/events
-# - Event Detail:          http://localhost:8000/events/{id}
-# - Login:                 http://localhost:8000/login
-# - Register:              http://localhost:8000/register
-# - My Bookings:           http://localhost:8000/my-bookings
-# - Profile:               http://localhost:8000/profile
-# - Admin Dashboard:       http://localhost:8000/admin
-# - API Docs (Swagger):    http://localhost:8000/docs
-```
-
-### Customization Guide
-
-#### Adding a New Page
-1. Create template: `app/templates/new_page.html`
-2. Extend base: `{% extends "base.html" %}`
-3. Add route in `app/routerss/views.py`
-4. Include page-specific JS in `{% block extra_js %}`
-
-#### Modifying Styles
-- Edit `app/static/css/style.css`
-- Use CSS variables for consistent theming
-- Follow existing component patterns
-
-#### Adding JavaScript Features
-- Add utility functions to `main.js`
-- Use `apiCall()` for all backend communication
-- Follow existing patterns for loading/error states
-
 ---
 
 ## Prerequisites
@@ -522,290 +420,212 @@ uvicorn app.main:app --reload
 - Python 3.11 or higher
 - pip (Python package manager)
 - Git (optional, for version control)
-- Gmail account (for email notifications)
+
+**Optional (for email/OAuth features):**
+- Gmail account with App Password (for email notifications)
 - Google Developer account (for Google OAuth)
 - LinkedIn Developer account (for LinkedIn OAuth)
 - Facebook Developer account (for Facebook OAuth)
 
----
-
-## Automated Tests
-
-The project includes a comprehensive test suite using **pytest** with **asyncio** support for testing async FastAPI endpoints.
-
-### Test Structure
-
-```
-tests/
-├── conftest.py                    # Shared fixtures & test configuration
-├── unit/                          # Unit tests (isolated, fast)
-│   ├── test_auth_utils.py         # Password hashing & verification
-│   ├── test_datetime_utils.py     # Datetime helper functions
-│   ├── test_pagination.py         # Pagination logic
-│   ├── test_response.py           # API response formatters
-│   ├── test_security.py           # JWT token creation/validation
-│   └── test_validators.py         # Input validation functions
-├── integration/                   # Integration tests (API endpoints)
-│   ├── test_admin.py              # Admin dashboard endpoints
-│   ├── test_audit.py              # Audit log endpoints
-│   ├── test_auth.py               # Authentication endpoints
-│   ├── test_categories.py         # Category CRUD endpoints
-│   ├── test_bookings.py           # Booking endpoints
-│   ├── test_events.py             # Event CRUD endpoints
-│   ├── test_invoices.py           # Invoice endpoints
-│   ├── test_notifications.py      # Notification endpoints
-│   ├── test_users.py              # User management endpoints
-│   └── test_waitlist.py           # Waitlist endpoints
-└── fixtures/                      # Test data factories
-    ├── booking_fixtures.py        # Booking test data
-    ├── category_fixtures.py       # Category test data
-    ├── event_fixtures.py          # Event test data
-    └── user_fixtures.py           # User test data
-```
-
-### Test Dependencies
-
-| Package | Version | Purpose |
-|---------|---------|---------|
-| pytest | 7.4.3 | Test framework |
-| pytest-asyncio | 0.21.1 | Async test support |
-| pytest-cov | 4.1.0 | Coverage reporting |
-| factory-boy | 3.3.0 | Test data factories |
-| faker | 20.1.0 | Fake data generation |
-| freezegun | 1.2.2 | Time manipulation |
-
-### Running Tests
-
-```bash
-# Run all tests
-pytest
-
-# Run with coverage
-pytest --cov=app --cov-report=html
-
-# Run specific test file
-pytest tests/integration/test_auth.py -v
-
-# Run unit tests only
-pytest tests/unit/ -v
-
-# Run integration tests only
-pytest tests/integration/ -v
-
-# Run with verbose output
-pytest -v --tb=short
-```
-
-### Test Configuration (`conftest.py`)
-
-- **Database**: Uses in-memory SQLite for fast, isolated tests
-- **Fixtures**: Provides `client` (TestClient), `db_session`, `admin_user`, `regular_user`, `auth_headers`
-- **Factories**: Factory Boy factories for User, Event, Category, Booking models
-- **Authentication**: Helper fixtures for generating valid JWT tokens
-
-### Writing Tests
-
-```python
-# Unit test example
-def test_password_hashing():
-    from app.utils.auth_utils import hash_password, verify_password
-    password = "Test@123456"
-    hashed = hash_password(password)
-    assert verify_password(password, hashed)
-
-# Integration test example
-def test_create_event(client, admin_auth_headers):
-    response = client.post(
-        "/api/v1/events/",
-        json={"title": "Test Event", ...},
-        headers=admin_auth_headers
-    )
-    assert response.status_code == 201
-    assert response.json()["success"] is True
-```
-
----
-
-## Interactive UI (Frontend Pages)
-
-The application includes a complete **server-side rendered web interface** built with Jinja2 templates, accessible directly in the browser. No separate frontend build process is required.
-
-### Available Pages
-
-| Route | Template | Description | Auth Required |
-|-------|----------|-------------|---------------|
-| `/` | `home.html` | Landing page with hero, stats, categories, featured events | No |
-| `/events` | `events.html` | Events listing with search, filters, pagination | No |
-| `/events/{id}` | `event_detail.html` | Event details with booking sidebar | No* |
-| `/login` | `login.html` | Login form with OAuth buttons | No |
-| `/register` | `register.html` | Registration with password strength meter | No |
-| `/profile` | `profile.html` | User profile, avatar, password change | Yes |
-| `/my-bookings` | `my_bookings.html` | User's bookings with filter tabs | Yes |
-| `/admin` | `admin_dashboard.html` | Admin dashboard with stats & analytics | Admin |
-| `/verify-email` | `verify_email.html` | Email verification page | No |
-
-*Booking requires authentication
-
-### Key UI Features
-
-- **Responsive Design**: Works on mobile, tablet, desktop
-- **Real-time Updates**: Booking seat availability, price calculation
-- **Toast Notifications**: Success/error/warning alerts auto-dismiss
-- **Loading States**: Spinners, skeleton screens, empty states
-- **Form Validation**: Client-side + server-side validation feedback
-- **OAuth Integration**: One-click Google/LinkedIn/Facebook login
-- **Admin Dashboard**: Visual stats cards, tables, rankings
-- **Image Upload**: Drag-and-drop avatar/event/category images
-
-### Accessing the UI
-
-```bash
-# Start server
-uvicorn app.main:app --reload
-
-# Open in browser
-http://localhost:8000/
-```
+> **Note:** The app works out-of-the-box without any of the above. Email verification is automatically disabled in dev mode when SMTP is unconfigured. OAuth logins simply won't appear if credentials are empty.
 
 ---
 
 ## Installation
 
-### Step 1: Clone the Repository
+### Quick Start (Recommended)
+
+```bash
+# 1. Clone the repository
+git clone <repository-url>
+cd event-management-system
+
+# 2. Create and activate virtual environment
+python -m venv venv
+# Windows:
+venv\Scripts\activate
+# macOS/Linux:
+source venv/bin/activate
+
+# 3. Install dependencies
+pip install -r requirements.txt
+
+# 4. Run the one-command setup (copies .env.example → .env, generates SECRET_KEY)
+python setup.py
+
+# 5. Start the app
+python run.py
+
+# 6. Open in browser
+open http://localhost:8000
+```
+
+### Step-by-Step Installation
+
+#### 1. Clone the Repository
 
 ```bash
 git clone <repository-url>
 cd event-management-system
 ```
 
-### Step 2: Create Virtual Environment
+#### 2. Create Virtual Environment
 
 **Windows:**
-
 ```bash
 python -m venv venv
 venv\Scripts\activate
 ```
 
 **macOS/Linux:**
-
 ```bash
 python3 -m venv venv
 source venv/bin/activate
 ```
 
-### Step 3: Install Dependencies
+#### 3. Install Dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### Step 4: Configure Environment Variables
+#### 4. Configure Environment Variables
 
-Create a `.env` file in the project root with the following configuration:
+**Option A: Automatic (Recommended)**
+```bash
+python setup.py
+```
+This copies `.env.example` → `.env` (if missing) and generates a secure `SECRET_KEY`.
 
-```env
-# Application
-APP_NAME="Event Management System"
-APP_VERSION="1.0.0"
-DEBUG=True
-API_PREFIX="/api/v1"
-
-# Database
-DATABASE_URL="sqlite:///./event_management.db"
-
-# JWT Configuration - Generate your own secure key!
-# Run: python -c "import secrets; print(secrets.token_urlsafe(32))"
-SECRET_KEY="your-generated-secret-key-here-at-least-32-characters"
-ALGORITHM="HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES=30
-REFRESH_TOKEN_EXPIRE_DAYS=7
-
-# Server
-HOST="0.0.0.0"
-PORT=8000
-
-# Default Admin Credentials (CHANGE IN PRODUCTION!)
-ADMIN_USERNAME="admin"
-ADMIN_EMAIL="admin@example.com"
-ADMIN_PASSWORD="Admin@1234"
-ADMIN_FIRST_NAME="Super"
-ADMIN_LAST_NAME="Admin"
-
-# Email Configuration (Gmail SMTP)
-DEFAULT_FROM_EMAIL="your-email@gmail.com"
-EMAIL_HOST="smtp.gmail.com"
-EMAIL_PORT=587
-EMAIL_USE_TLS=True
-EMAIL_HOST_USER="your-email@gmail.com"
-EMAIL_HOST_PASSWORD="your-16-character-app-password"
-
-# Google OAuth Configuration
-GOOGLE_CLIENT_ID="your-google-client-id.apps.googleusercontent.com"
-GOOGLE_CLIENT_SECRET="your-google-client-secret"
-GOOGLE_REDIRECT_URI="http://localhost:8000/api/v1/auth/google/callback"
-
-# LinkedIn OAuth Configuration
-LINKEDIN_CLIENT_ID="your-linkedin-client-id"
-LINKEDIN_CLIENT_SECRET="your-linkedin-client-secret"
-LINKEDIN_REDIRECT_URI="http://localhost:8000/api/v1/auth/linkedin/callback"
-
-# Facebook OAuth Configuration
-FACEBOOK_CLIENT_ID="your-facebook-app-id"
-FACEBOOK_CLIENT_SECRET="your-facebook-app-secret"
-FACEBOOK_REDIRECT_URI="http://localhost:8000/api/v1/auth/facebook/callback"
-
-# Email Verification
-VERIFICATION_TOKEN_EXPIRE_MINUTES=1440
-REQUIRE_EMAIL_VERIFICATION=True
-RESET_TOKEN_EXPIRE_MINUTES=30
-
-# Image Upload
-MAX_IMAGE_SIZE_MB=5
+**Option B: Manual**
+```bash
+cp .env.example .env
+# Then edit .env and set a SECRET_KEY:
+#   python -c "import secrets; print(secrets.token_urlsafe(32))"
 ```
 
-### Step 5: Initialize Database
+> **Note:** The app also auto-copies `.env.example` → `.env` on startup if `.env` is missing, so you can just run `python run.py` directly.
+
+#### 5. Run the Application
 
 ```bash
-alembic upgrade head
+python run.py
 ```
 
-### Step 6: Run the Application
+Or with uvicorn directly:
 
 ```bash
 uvicorn app.main:app --reload
 ```
 
-### Step 7: Access the Application
+#### 6. Access the Application
 
 | Resource                          | URL                            |
 |-----------------------------------|--------------------------------|
+| Web Application (Homepage)        | http://localhost:8000/         |
 | API Documentation (Swagger UI)    | http://localhost:8000/docs     |
-| Alternative Documentation (ReDoc) | http://localhost:8000/redoc    |
+| Alternative Docs (ReDoc)          | http://localhost:8000/redoc    |
 | Health Check                      | http://localhost:8000/health   |
+
+#### Default Admin Account
+
+On first run, the system automatically creates a default admin account:
+
+| Field    | Value               |
+|----------|---------------------|
+| Username | `admin`             |
+| Password | `Admin@1234`        |
+| Email    | `admin@example.com` |
+
+> **Important:** Change the default password immediately after first login!
+
+---
+
+## Environment Setup
+
+### `.env` File Reference
+
+The system uses a `.env` file for all configuration. See `.env.example` for the complete template.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `APP_NAME` | Event Management System | Application name |
+| `DEBUG` | True | Development mode (disables email verification if SMTP unconfigured) |
+| `DATABASE_URL` | sqlite:///./event_management.db | Database connection string |
+| `SECRET_KEY` | (generated) | JWT signing key (min 32 chars for production) |
+| `REQUIRE_EMAIL_VERIFICATION` | True | Block login until email verified (auto-disabled in dev when SMTP missing) |
+| `FRONTEND_URL` | http://localhost:8000 | Used in email links and OAuth callbacks |
+| `UPLOAD_DIR` | uploads | Directory for uploaded files |
+
+### Smart Dev Defaults
+
+When `DEBUG=True` and SMTP credentials (`EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, `DEFAULT_FROM_EMAIL`) are empty:
+
+- `REQUIRE_EMAIL_VERIFICATION` is automatically set to `False` — login works without email verification
+- `EmailService.send_email()` logs a warning and returns `False` instead of crashing
+
+This means a new developer can clone, run, and log in without configuring any email provider.
+
+### Setup Script
+
+```bash
+python setup.py
+```
+
+This script:
+1. Copies `.env.example` → `.env` if `.env` doesn't exist
+2. Generates a cryptographically secure `SECRET_KEY` via `secrets.token_urlsafe(32)`
+3. Prints a summary of the setup
+
+---
+
+## Running the Application
+
+### Development
+
+```bash
+# Standard
+python run.py
+
+# Or with hot-reload
+uvicorn app.main:app --reload
+```
+
+### Production
+
+```bash
+# Set DEBUG=False in .env and configure a production database (PostgreSQL)
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
+```
+
+### What Happens on Startup
+
+1. **Alienbic migrations** run automatically (`alembic upgrade head`)
+2. **Database seeding** creates the default admin user if not exists
+3. **Event status update** marks past events as `COMPLETED`
+4. **Background scheduler** starts with 5 jobs
+5. **Frontend** is served at `/`, API at `/api/v1/`
 
 ---
 
 ## Database Migrations
 
-This project uses **Alembic** for database migrations.
-
-### Common Commands
+Migrations run **automatically** on every startup via `app/main.py`. You can also manage them manually:
 
 ```bash
 # Create a new migration
-alembic revision --autogenerate -m "Description of changes"
+alembic revision --autogenerate -m "Description"
 
-# Apply migrations
+# Apply pending migrations
 alembic upgrade head
 
 # Check current version
 alembic current
 
-# View migration history
+# View history
 alembic history
 
-# Rollback last migration
+# Rollback one step
 alembic downgrade -1
 ```
 
@@ -853,128 +673,163 @@ alembic downgrade -1
 
 ### Authentication
 
-| Method | Endpoint                             | Description                    | Auth Required |
-|--------|--------------------------------------|--------------------------------|---------------|
-| POST   | `/api/v1/auth/register`              | Register new user              | No            |
-| POST   | `/api/v1/auth/login`                 | Login with username/password   | No            |
-| POST   | `/api/v1/auth/verify-email`          | Verify email with token        | No            |
-| POST   | `/api/v1/auth/resend-verification`   | Resend verification email      | No            |
-| POST   | `/api/v1/auth/forgot-password`       | Request password reset         | No            |
-| POST   | `/api/v1/auth/reset-password`        | Reset password with token      | No            |
-| POST   | `/api/v1/auth/refresh`               | Refresh access token           | No            |
-| POST   | `/api/v1/auth/logout`                | Logout and blacklist tokens    | Yes           |
-| GET    | `/api/v1/auth/google/login`          | Google OAuth login             | No            |
-| GET    | `/api/v1/auth/google/callback`       | Google OAuth callback          | No            |
-| GET    | `/api/v1/auth/linkedin/login`        | LinkedIn OAuth login           | No            |
-| GET    | `/api/v1/auth/linkedin/callback`     | LinkedIn OAuth callback        | No            |
-| GET    | `/api/v1/auth/facebook/login`        | Facebook OAuth login           | No            |
-| GET    | `/api/v1/auth/facebook/callback`     | Facebook OAuth callback        | No            |
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| POST | `/api/v1/auth/register` | Register new user | No |
+| POST | `/api/v1/auth/login` | Login with username/password | No |
+| POST | `/api/v1/auth/verify-email` | Verify email with token | No |
+| POST | `/api/v1/auth/resend-verification` | Resend verification email | No |
+| POST | `/api/v1/auth/forgot-password` | Request password reset | No |
+| POST | `/api/v1/auth/reset-password` | Reset password with token | No |
+| POST | `/api/v1/auth/refresh` | Refresh access token | No |
+| POST | `/api/v1/auth/logout` | Logout and blacklist tokens | Yes |
+| GET | `/api/v1/auth/google/login` | Google OAuth login redirect | No |
+| GET | `/api/v1/auth/google/callback` | Google OAuth callback | No |
+| GET | `/api/v1/auth/linkedin/login` | LinkedIn OAuth login redirect | No |
+| GET | `/api/v1/auth/linkedin/callback` | LinkedIn OAuth callback | No |
+| GET | `/api/v1/auth/facebook/login` | Facebook OAuth login redirect | No |
+| GET | `/api/v1/auth/facebook/callback` | Facebook OAuth callback | No |
 
 ### Users
 
-| Method | Endpoint                              | Description                       | Auth Required |
-|--------|---------------------------------------|-----------------------------------|---------------|
-| GET    | `/api/v1/users/me`                    | Get current user profile          | Yes           |
-| PUT    | `/api/v1/users/me`                    | Update current user profile       | Yes           |
-| POST   | `/api/v1/users/me/change-password`    | Change password                   | Yes           |
-| GET    | `/api/v1/users/`                      | Get all users (Admin only)        | Admin         |
-| GET    | `/api/v1/users/{user_id}`             | Get user by ID (Admin only)       | Admin         |
-| PUT    | `/api/v1/users/{user_id}/deactivate`  | Deactivate user (Admin only)      | Admin         |
-| PUT    | `/api/v1/users/{user_id}/activate`    | Activate user (Admin only)        | Admin         |
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| GET | `/api/v1/users/me` | Get current user profile | Yes |
+| PUT | `/api/v1/users/me` | Update current user profile | Yes |
+| POST | `/api/v1/users/me/change-password` | Change password | Yes |
+| GET | `/api/v1/users/` | Get all users (Admin only) | Admin |
+| GET | `/api/v1/users/{user_id}` | Get user by ID (Admin only) | Admin |
+| PUT | `/api/v1/users/{user_id}/deactivate` | Deactivate user (Admin only) | Admin |
+| PUT | `/api/v1/users/{user_id}/activate` | Activate user (Admin only) | Admin |
 
 ### Events
 
-| Method | Endpoint                              | Description                          | Auth Required  |
-|--------|---------------------------------------|--------------------------------------|----------------|
-| GET    | `/api/v1/events`                      | Get all events (with filters)        | No (Optional)  |
-| GET    | `/api/v1/events/deleted`              | Get deleted events (Admin only)      | Admin          |
-| GET    | `/api/v1/events/{event_id}`           | Get event by ID                      | No (Optional)  |
-| POST   | `/api/v1/events`                      | Create event (Admin only)            | Admin          |
-| PUT    | `/api/v1/events/{event_id}`           | Update event (Admin only)            | Admin          |
-| DELETE | `/api/v1/events/{event_id}`           | Soft delete event (Admin only)       | Admin          |
-| POST   | `/api/v1/events/{event_id}/restore`   | Restore deleted event (Admin only)   | Admin          |
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| GET | `/api/v1/events` | List events (with filters, search, pagination) | No |
+| GET | `/api/v1/events/deleted` | List deleted events (Admin only) | Admin |
+| GET | `/api/v1/events/{event_id}` | Get event by ID | No |
+| POST | `/api/v1/events` | Create event (Admin only) | Admin |
+| PUT | `/api/v1/events/{event_id}` | Update event (Admin only) | Admin |
+| DELETE | `/api/v1/events/{event_id}` | Soft delete event (Admin only) | Admin |
+| POST | `/api/v1/events/{event_id}/restore` | Restore deleted event (Admin only) | Admin |
 
 ### Categories
 
-| Method | Endpoint                                | Description                       | Auth Required  |
-|--------|-----------------------------------------|-----------------------------------|----------------|
-| GET    | `/api/v1/categories`                    | Get all categories                | No (Optional)  |
-| GET    | `/api/v1/categories/tree`               | Get category hierarchy            | No (Optional)  |
-| GET    | `/api/v1/categories/popular`            | Get popular categories            | No (Optional)  |
-| GET    | `/api/v1/categories/{category_id}`      | Get category by ID                | No (Optional)  |
-| POST   | `/api/v1/categories`                    | Create category (Admin only)      | Admin          |
-| PUT    | `/api/v1/categories/{category_id}`      | Update category (Admin only)      | Admin          |
-| DELETE | `/api/v1/categories/{category_id}`      | Delete category (Admin only)      | Admin          |
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| GET | `/api/v1/categories` | List all categories | No |
+| GET | `/api/v1/categories/tree` | Get category hierarchy tree | No |
+| GET | `/api/v1/categories/popular` | Get popular categories | No |
+| GET | `/api/v1/categories/{category_id}` | Get category by ID | No |
+| POST | `/api/v1/categories` | Create category (Admin only) | Admin |
+| PUT | `/api/v1/categories/{category_id}` | Update category (Admin only) | Admin |
+| DELETE | `/api/v1/categories/{category_id}` | Delete category (Admin only) | Admin |
 
 ### Bookings
 
-| Method | Endpoint                               | Description                        | Auth Required |
-|--------|----------------------------------------|------------------------------------|---------------|
-| POST   | `/api/v1/bookings`                     | Book an event                      | Yes           |
-| GET    | `/api/v1/bookings/me`                  | Get current user's bookings        | Yes           |
-| GET    | `/api/v1/bookings/history`             | Get categorized booking history    | Yes           |
-| GET    | `/api/v1/bookings/statistics`          | Get booking statistics             | Yes           |
-| GET    | `/api/v1/bookings/me/summary`          | Get booking summary                | Yes           |
-| GET    | `/api/v1/bookings/me/timeline`         | Get booking timeline               | Yes           |
-| GET    | `/api/v1/bookings/me/export/csv`       | Export bookings to CSV             | Yes           |
-| GET    | `/api/v1/bookings/me/export/pdf`       | Export bookings to PDF             | Yes           |
-| POST   | `/api/v1/bookings/{booking_id}/cancel` | Cancel a booking                   | Yes           |
-| GET    | `/api/v1/bookings/`                    | Get all bookings (Admin only)      | Admin         |
-| GET    | `/api/v1/bookings/events/{event_id}`   | Get event bookings (Admin only)    | Admin         |
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| POST | `/api/v1/bookings` | Book an event | Yes |
+| GET | `/api/v1/bookings/me` | Get current user's bookings | Yes |
+| GET | `/api/v1/bookings/history` | Categorized booking history | Yes |
+| GET | `/api/v1/bookings/statistics` | Booking statistics | Yes |
+| GET | `/api/v1/bookings/me/summary` | Booking summary | Yes |
+| GET | `/api/v1/bookings/me/timeline` | Booking timeline | Yes |
+| GET | `/api/v1/bookings/me/export/csv` | Export bookings to CSV | Yes |
+| GET | `/api/v1/bookings/me/export/pdf` | Export bookings to PDF | Yes |
+| POST | `/api/v1/bookings/{booking_id}/cancel` | Cancel a booking | Yes |
+| GET | `/api/v1/bookings/` | All bookings (Admin only) | Admin |
+| GET | `/api/v1/bookings/events/{event_id}` | Event bookings (Admin only) | Admin |
+
+### Payments
+
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| POST | `/api/v1/payments/initiate` | Initiate payment for a booking | Yes |
+| GET | `/api/v1/payments/{payment_id}` | Get payment details | Yes |
+| GET | `/api/v1/payments/booking/{booking_id}` | Get payment by booking | Yes |
+| GET | `/api/v1/payments/me` | List own payments | Yes |
+| POST | `/api/v1/payments/{payment_id}/simulate` | Simulate payment (dev mode) | Yes |
+| POST | `/api/v1/payments/{payment_id}/refund` | Refund a payment | Yes |
 
 ### Invoices
 
-| Method | Endpoint                           | Description               | Auth Required |
-|--------|------------------------------------|---------------------------|---------------|
-| GET    | `/api/v1/invoices/{booking_id}`     | Get invoice as JSON       | Yes           |
-| GET    | `/api/v1/invoices/{booking_id}/pdf` | Download invoice as PDF   | Yes           |
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| GET | `/api/v1/invoices/{booking_id}` | Get invoice as JSON | Yes |
+| GET | `/api/v1/invoices/{booking_id}/pdf` | Download invoice as PDF | Yes |
 
 ### Waitlist
 
-| Method | Endpoint                                | Description           | Auth Required |
-|--------|-----------------------------------------|-----------------------|---------------|
-| POST   | `/api/v1/waitlist/{event_id}/join`      | Join waitlist         | Yes           |
-| GET    | `/api/v1/waitlist/{event_id}/position`  | Check position        | Yes           |
-| DELETE | `/api/v1/waitlist/{event_id}/leave`     | Leave waitlist        | Yes           |
-| POST   | `/api/v1/waitlist/{event_id}/confirm`   | Confirm spot          | Yes           |
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| POST | `/api/v1/waitlist/{event_id}/join` | Join event waitlist | Yes |
+| GET | `/api/v1/waitlist/{event_id}/position` | Check waitlist position | Yes |
+| DELETE | `/api/v1/waitlist/{event_id}/leave` | Leave waitlist | Yes |
+| POST | `/api/v1/waitlist/{event_id}/confirm` | Confirm available spot | Yes |
 
 ### Notifications
 
-| Method | Endpoint                                   | Description                      | Auth Required |
-|--------|--------------------------------------------|----------------------------------|---------------|
-| GET    | `/api/v1/notifications/`                   | Get user notifications           | Yes           |
-| GET    | `/api/v1/notifications/unread/count`       | Get unread count                 | Yes           |
-| POST   | `/api/v1/notifications/mark-read`          | Mark notifications as read       | Yes           |
-| GET    | `/api/v1/notifications/preferences`        | Get preferences                  | Yes           |
-| PUT    | `/api/v1/notifications/preferences`        | Update preferences               | Yes           |
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| GET | `/api/v1/notifications/` | List user notifications | Yes |
+| GET | `/api/v1/notifications/unread/count` | Get unread count | Yes |
+| POST | `/api/v1/notifications/mark-read` | Mark notifications as read | Yes |
+| GET | `/api/v1/notifications/preferences` | Get notification preferences | Yes |
+| PUT | `/api/v1/notifications/preferences` | Update notification preferences | Yes |
 
 ### Admin Dashboard
 
-| Method | Endpoint                                         | Description               | Auth Required |
-|--------|--------------------------------------------------|---------------------------|---------------|
-| GET    | `/api/v1/admin/dashboard/stats`                  | Dashboard statistics      | Admin         |
-| GET    | `/api/v1/admin/users/activity`                   | User activity             | Admin         |
-| GET    | `/api/v1/admin/events/analytics`                 | Event analytics           | Admin         |
-| GET    | `/api/v1/admin/reports/bookings`                 | Booking report            | Admin         |
-| GET    | `/api/v1/admin/reports/revenue`                  | Revenue report            | Admin         |
-| GET    | `/api/v1/admin/reports/bookings/export/csv`      | Export bookings report    | Admin         |
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| GET | `/api/v1/admin/dashboard/stats` | Dashboard statistics | Admin |
+| GET | `/api/v1/admin/users/activity` | User activity | Admin |
+| GET | `/api/v1/admin/events/analytics` | Event analytics | Admin |
+| GET | `/api/v1/admin/reports/bookings` | Booking report | Admin |
+| GET | `/api/v1/admin/reports/revenue` | Revenue report | Admin |
+| GET | `/api/v1/admin/reports/bookings/export/csv` | Export bookings report | Admin |
 
 ### Audit Logs
 
-| Method | Endpoint                                  | Description               | Auth Required |
-|--------|-------------------------------------------|---------------------------|---------------|
-| GET    | `/api/v1/audit/logs`                      | Get audit logs            | Admin         |
-| GET    | `/api/v1/audit/summary`                   | Get audit summary         | Admin         |
-| GET    | `/api/v1/audit/user/{user_id}`            | Get user audit trail      | Admin         |
-| GET    | `/api/v1/audit/entity/{type}/{id}`        | Get entity audit trail    | Admin         |
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| GET | `/api/v1/audit/logs` | List audit logs | Admin |
+| GET | `/api/v1/audit/summary` | Audit summary | Admin |
+| GET | `/api/v1/audit/user/{user_id}` | User audit trail | Admin |
+| GET | `/api/v1/audit/entity/{type}/{id}` | Entity audit trail | Admin |
 
 ### File Upload
 
-| Method | Endpoint                                   | Description               | Auth Required |
-|--------|--------------------------------------------|---------------------------|---------------|
-| POST   | `/api/v1/upload/event/{event_id}`          | Upload event image        | Admin         |
-| POST   | `/api/v1/upload/category/{category_id}`    | Upload category image     | Admin         |
-| POST   | `/api/v1/upload/avatar`                    | Upload user avatar        | Yes           |
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| POST | `/api/v1/upload/event/{event_id}` | Upload event image | Admin |
+| POST | `/api/v1/upload/category/{category_id}` | Upload category image | Admin |
+| POST | `/api/v1/upload/avatar` | Upload user avatar | Yes |
+
+---
+
+## Payment System
+
+The payment module provides a complete payment lifecycle:
+
+### Flow
+
+1. **Create Booking** → `POST /api/v1/bookings` → booking with `payment_status: "pending"`
+2. **Initiate Payment** → `POST /api/v1/payments/initiate` → creates payment record
+3. **Simulate Payment** → `POST /api/v1/payments/{id}/simulate` → marks as `completed` or `failed`
+4. **Refund Payment** → `POST /api/v1/payments/{id}/refund` → marks as `refunded`
+
+### Payment Statuses
+
+- `pending` — Payment initiated, awaiting processing
+- `completed` — Payment successful
+- `failed` — Payment failed
+- `refunded` — Payment refunded
+
+### Audit Trail
+
+All payment actions (initiate, complete, fail, refund) are logged to the audit log with user ID, IP address, and user agent.
 
 ---
 
@@ -982,31 +837,31 @@ alembic downgrade -1
 
 The system runs automatic background jobs using **APScheduler**:
 
-| Job                         | Frequency      | Description                                         |
-|-----------------------------|----------------|-----------------------------------------------------|
-| Event Status Update         | Every 1 hour   | Auto-updates past events to `COMPLETED` status      |
-| Token Cleanup               | Every 24 hours | Removes expired tokens from blacklist               |
-| Reset Token Cleanup         | Every 12 hours | Removes expired password reset tokens               |
-| Verification Token Cleanup  | Every 24 hours | Removes expired email verification tokens           |
-| Waitlist Cleanup            | Every 1 hour   | Removes expired waitlist notifications              |
+| Job | Frequency | Description |
+|-----|-----------|-------------|
+| Event Status Update | Every 1 hour | Auto-updates past events to `COMPLETED` status |
+| Token Cleanup | Every 24 hours | Removes expired tokens from blacklist |
+| Reset Token Cleanup | Every 12 hours | Removes expired password reset tokens |
+| Verification Token Cleanup | Every 24 hours | Removes expired email verification tokens |
+| Waitlist Cleanup | Every 1 hour | Removes expired waitlist notifications |
 
 ---
 
 ## Security Features
 
-| Feature                | Description                                           |
-|------------------------|-------------------------------------------------------|
-| Password Hashing       | bcrypt with salt                                      |
-| JWT Tokens             | Access tokens (30 min) and refresh tokens (7 days)    |
-| Token Blacklist        | Revoked tokens are blacklisted                        |
-| Email Verification     | Required before login                                 |
-| Refresh Token Rotation | Old refresh tokens are blacklisted on refresh         |
-| Input Validation       | Pydantic schemas with field validators                |
-| SQL Injection Protection | SQLAlchemy ORM                                      |
-| CORS                   | Configurable allowed origins                          |
-| Row-Level Locking      | Prevents seat overselling                             |
-| Audit Logging          | Complete action tracking                              |
-| Soft Delete            | Data preservation                                     |
+| Feature | Description |
+|---------|-------------|
+| Password Hashing | bcrypt with salt |
+| JWT Tokens | Access tokens (30 min) and refresh tokens (7 days) |
+| Token Blacklist | Revoked tokens are blacklisted and rejected |
+| Email Verification | Optional block on unverified emails |
+| Refresh Token Rotation | Old tokens blacklisted on refresh |
+| Input Validation | Pydantic schemas with field validators |
+| SQL Injection Protection | SQLAlchemy ORM (parameterized queries) |
+| CORS | Configurable allowed origins |
+| Row-Level Locking | `SELECT ... FOR UPDATE` prevents seat overselling |
+| Audit Logging | Every action tracked with IP and user agent |
+| Soft Delete | Data preserved instead of deleted |
 
 ---
 
@@ -1024,18 +879,18 @@ All errors follow a consistent format:
 
 ### Common Error Codes
 
-| Error Code                  | Description                        |
-|-----------------------------|------------------------------------|
-| `INVALID_CREDENTIALS`       | Wrong username/password            |
-| `INVALID_TOKEN`             | Invalid or expired JWT token       |
-| `PERMISSION_DENIED`         | Insufficient permissions           |
-| `EMAIL_ALREADY_EXISTS`      | Email already registered           |
-| `USERNAME_ALREADY_EXISTS`   | Username already taken             |
-| `EVENT_NOT_FOUND`           | Event doesn't exist                |
-| `INSUFFICIENT_SEATS`        | Not enough seats available         |
-| `BOOKING_NOT_FOUND`         | Booking not found                  |
-| `CATEGORY_NOT_FOUND`        | Category not found                 |
-| `VALIDATION_ERROR`          | Request validation failed          |
+| Code | Description |
+|------|-------------|
+| `INVALID_CREDENTIALS` | Wrong username/password |
+| `INVALID_TOKEN` | Invalid or expired JWT token |
+| `PERMISSION_DENIED` | Insufficient permissions |
+| `EMAIL_ALREADY_EXISTS` | Email already registered |
+| `USERNAME_ALREADY_EXISTS` | Username already taken |
+| `EVENT_NOT_FOUND` | Event doesn't exist |
+| `INSUFFICIENT_SEATS` | Not enough seats available |
+| `BOOKING_NOT_FOUND` | Booking not found |
+| `CATEGORY_NOT_FOUND` | Category not found |
+| `VALIDATION_ERROR` | Request validation failed |
 
 ---
 
@@ -1043,10 +898,10 @@ All errors follow a consistent format:
 
 All list endpoints support pagination with query parameters:
 
-| Parameter | Default | Description                  |
-|-----------|---------|------------------------------|
-| `page`    | `1`     | Page number (starts at 1)    |
-| `limit`   | `10`    | Items per page (max 100)     |
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `page` | `1` | Page number (starts at 1) |
+| `limit` | `10` | Items per page (max 100) |
 
 **Example:**
 
@@ -1075,48 +930,104 @@ GET /api/v1/events?page=2&limit=20
 
 ## Testing
 
-### Test Registration
+The project includes **375 tests** covering unit, integration, and OAuth scenarios.
 
-```bash
-curl -X POST "http://localhost:8000/api/v1/auth/register" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "username": "testuser",
-    "email": "test@example.com",
-    "password": "Test@123456",
-    "first_name": "Test",
-    "last_name": "User"
-  }'
+### Test Structure
+
+```
+tests/
+├── conftest.py                    # Shared fixtures (in-memory SQLite, TestClient, users)
+├── unit/                          # 6 files — isolated function-level tests
+├── oauth/                         # 3 files — mocked HTTP OAuth flows
+├── integration/                   # 11 files — full API endpoint tests
+└── fixtures/                      # 4 files — test data factories
 ```
 
-### Test Login
+### Test Dependencies
+
+| Package | Version | Purpose |
+|---------|---------|---------|
+| pytest | 7.4.3 | Test framework |
+| pytest-asyncio | 0.21.1 | Async test support |
+| pytest-cov | 4.1.0 | Coverage reporting |
+| factory-boy | 3.3.0 | Test data factories |
+| faker | 20.1.0 | Fake data generation |
+| freezegun | 1.2.2 | Time manipulation |
+| httpx | 0.25.0 | Async HTTP client |
+| requests | 2.31.0 | OAuth mock responses |
+
+### Running Tests
 
 ```bash
-curl -X POST "http://localhost:8000/api/v1/auth/login" \
-  -H "Content-Type: application/json" \
-  -d '{"username":"testuser","password":"Test@123456"}'
+# Run all 375 tests
+pytest
+
+# With coverage report
+pytest --cov=app --cov-report=html
+
+# Run specific test file
+pytest tests/integration/test_payments.py -v
+
+# Run by marker
+pytest -m payments
+pytest -m integration
+
+# Verbose output with short traceback
+pytest -v --tb=short
 ```
 
-### Test Protected Endpoint
+### Test Configuration
 
-```bash
-curl -X GET "http://localhost:8000/api/v1/users/me" \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+- **Database**: In-memory SQLite (`sqlite:///:memory:`) with `StaticPool` for thread safety
+- **Isolation**: Each test gets a fresh database session with rollback after completion
+- **Environment**: Loads `.env.test` which disables email verification and uses fake OAuth credentials
+- **Fixtures**: Provides `client` (TestClient), `db` (DB session), `test_user`, `test_admin`, `user_token`, `admin_token`, auth headers
+
+### Writing Tests
+
+```python
+# Unit test example
+def test_password_hashing():
+    from app.utils.auth_utils import hash_password, verify_password
+    password = "Test@123456"
+    hashed = hash_password(password)
+    assert verify_password(password, hashed)
+
+# Integration test example
+def test_create_event(client, admin_auth_headers):
+    response = client.post(
+        "/api/v1/events/",
+        json={"title": "Test Event", "description": "...", ...},
+        headers=admin_auth_headers
+    )
+    assert response.status_code == 201
+    assert response.json()["success"] is True
 ```
+
+### Available Pytest Markers
+
+Defined in `pytest.ini`:
+
+- `unit` — Fast unit tests
+- `integration` — API endpoint tests
+- `oauth` — OAuth service tests
+- `payments` — Payment system tests
 
 ---
 
 ## Troubleshooting
 
-| Issue                    | Solution                                                               |
-|--------------------------|------------------------------------------------------------------------|
-| Module not found errors  | Run `pip install -r requirements.txt`                                  |
-| Database locked          | Delete `event_management.db` and run migrations again                  |
-| Email not sending        | Generate a new Gmail App Password                                      |
-| Token expired            | Use the refresh token endpoint to get new tokens                       |
-| Port already in use      | Change `PORT` in `.env` or kill the process using port 8000            |
-| CORS error               | Configure allowed origins in `.env`                                    |
-| Migration conflicts      | Delete the database and run `alembic upgrade head`                     |
+| Issue | Solution |
+|-------|----------|
+| Module not found | Run `pip install -r requirements.txt` |
+| Database locked | Delete `event_management.db` and restart |
+| Email not sending | Generate a new Gmail App Password, or leave SMTP fields empty to auto-disable in dev mode |
+| Token expired | Use `POST /api/v1/auth/refresh` to get new tokens |
+| Port in use | Change `PORT` in `.env` or kill the process on port 8000 |
+| CORS error | Update allowed origins in the CORS middleware in `app/main.py` |
+| Migration conflicts | Delete the database and restart (migrations auto-run) |
+| OAuth callback fails | Ensure redirect URIs match exactly between your OAuth provider config and `.env` |
+| Secret key warning | Run `python setup.py` to generate a secure key |
 
 ---
 
@@ -1124,10 +1035,10 @@ curl -X GET "http://localhost:8000/api/v1/users/me" \
 
 On first run, the system automatically creates a default admin account:
 
-| Field    | Value                  |
-|----------|------------------------|
-| Username | `admin`                |
-| Password | `Admin@1234`           |
-| Email    | `admin@example.com`    |
+| Field | Value |
+|-------|-------|
+| Username | `admin` |
+| Password | `Admin@1234` |
+| Email | `admin@example.com` |
 
-> ⚠️ **Important:** Change the default password immediately after first login!
+> **Important:** Change the default password immediately after first login!

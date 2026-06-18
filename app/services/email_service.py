@@ -14,6 +14,13 @@ class EmailService:
     """Service for sending emails via SMTP or Postmark API"""
 
     @staticmethod
+    def _is_configured() -> bool:
+        """Check if email sending is actually configured"""
+        if settings.EMAIL_PROVIDER == "postmark":
+            return bool(settings.POSTMARK_API_TOKEN)
+        return bool(settings.EMAIL_HOST_USER and settings.EMAIL_HOST_PASSWORD and settings.DEFAULT_FROM_EMAIL)
+
+    @staticmethod
     def send_email(
         to_email: str,
         subject: str,
@@ -24,6 +31,10 @@ class EmailService:
         Send an email using configured provider.
         Returns True if successful, False otherwise.
         """
+        if not EmailService._is_configured():
+            logger.warning(f"Email not configured. Skipping send to {to_email} (subject: {subject})")
+            return False
+
         if settings.EMAIL_PROVIDER == "postmark":
             return EmailService._send_via_postmark(to_email, subject, html_content, text_content)
         else:

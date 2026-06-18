@@ -44,6 +44,8 @@ class AuditActionType(str, enum.Enum):
     PAYMENT_INITIATE = "payment.initiate"
     PAYMENT_SUCCESS = "payment.success"
     PAYMENT_FAILED = "payment.failed"
+    PAYMENT_UPDATE = "payment.update"
+    PAYMENT_REFUND = "payment.refund"
     
     # Admin actions
     ADMIN_ACTION = "admin.action"
